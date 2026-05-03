@@ -8,7 +8,7 @@ import random
 import math
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.2" 
+CURRENT_VERSION = "1.1.3" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
@@ -25,19 +25,16 @@ class PaintlyApp:
         self.brush_size = 5
         self.brush_type = "Solid" 
         
-        # Stroke Recording (For Replay)
+        # Stroke Recording
         self.stroke_history = [] 
         self.is_replaying = False
         
         self.stabilizer_on = tk.BooleanVar(value=True)
-        self.shape_correction = tk.BooleanVar(value=True)
         
         self.points = []
         self.last_x, self.last_y = None, None
 
         self.setup_ui()
-        # Check for updates 1 second after launch
-        self.root.after(1000, self.check_for_updates)
 
     def setup_ui(self):
         # Sidebar
@@ -48,6 +45,13 @@ class PaintlyApp:
         self.color_preview = tk.Frame(self.sidebar, bg=self.draw_color, width=45, height=45, highlightbackground="white", highlightthickness=2, cursor="hand2")
         self.color_preview.pack(pady=5)
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
+
+        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
+
+        # UPDATE SYSTEM (New Button Logic)
+        tk.Label(self.sidebar, text="SYSTEM", fg="#bdc3c7", bg="#34495e", font=("Arial", 8, "bold")).pack()
+        self.update_btn = tk.Button(self.sidebar, text="🔄 Check for Update", command=self.manual_update_check, bg="#7f8c8d", fg="white", relief="flat")
+        self.update_btn.pack(fill="x", pady=5)
 
         ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
 
@@ -80,6 +84,36 @@ class PaintlyApp:
         self.canvas.bind("<B1-Motion>", self.paint)
         self.canvas.bind("<ButtonRelease-1>", self.stop_draw)
 
+    def manual_update_check(self):
+        """Triggered only when the user clicks the button"""
+        self.update_btn.config(text="Checking...", state="disabled")
+        try:
+            r = requests.get(VERSION_URL, timeout=5, headers={'Cache-Control': 'no-cache'})
+            if r.status_code == 200:
+                remote_v = r.text.strip()
+                if remote_v != CURRENT_VERSION:
+                    if messagebox.askyesno("Update Found", f"Version {remote_v} is available. Download and restart?"):
+                        self.do_update()
+                else:
+                    messagebox.showinfo("Paintly", "You are using the latest version.")
+            else:
+                messagebox.showerror("Error", "Could not reach the update server.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Connection failed: {e}")
+        
+        self.update_btn.config(text="🔄 Check for Update", state="normal")
+
+    def do_update(self):
+        try:
+            new_code = requests.get(UPDATE_URL).text
+            if "class PaintlyApp" in new_code:
+                with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
+                    f.write(new_code)
+                # Restart the app
+                os.execl(sys.executable, sys.executable, *sys.argv)
+        except Exception as e:
+            messagebox.showerror("Update Failed", f"Error: {e}")
+
     def start_draw(self, event):
         if self.is_replaying: return
         self.points = [(event.x, event.y)]
@@ -94,14 +128,12 @@ class PaintlyApp:
             x = self.last_x * 0.7 + event.x * 0.3
             y = self.last_y * 0.7 + event.y * 0.3
 
-        # Draw and Save to History
         self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND, smooth=tk.TRUE)
         self.stroke_history.append({
             'coords': (self.last_x, self.last_y, x, y),
             'color': self.current_color,
             'size': self.brush_size
         })
-        
         self.last_x, self.last_y = x, y
 
     def stop_draw(self, event):
@@ -109,7 +141,6 @@ class PaintlyApp:
 
     def run_replay(self):
         if not self.stroke_history or self.is_replaying: return
-        
         self.is_replaying = True
         self.canvas.delete("all")
         
@@ -122,26 +153,6 @@ class PaintlyApp:
                 self.is_replaying = False
 
         play_step(0)
-
-    def check_for_updates(self):
-        try:
-            # Force cache bypass
-            r = requests.get(VERSION_URL, timeout=5, headers={'Cache-Control': 'no-cache'})
-            if r.status_code == 200:
-                remote_v = r.text.strip()
-                if remote_v != CURRENT_VERSION:
-                    if messagebox.askyesno("Update", f"New Version {remote_v} available! Update?"):
-                        self.do_update()
-        except: pass
-
-    def do_update(self):
-        try:
-            new_code = requests.get(UPDATE_URL).text
-            if "class PaintlyApp" in new_code:
-                with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
-                    f.write(new_code)
-                os.execl(sys.executable, sys.executable, *sys.argv)
-        except: pass
 
     def change_color(self):
         selected = askcolor(color=self.draw_color)[1]
