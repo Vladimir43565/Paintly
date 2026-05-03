@@ -8,8 +8,8 @@ import random
 import webbrowser
 
 # --- CONFIGURATION ---
-# local version must be lower than GitHub's version.txt to trigger an update
-CURRENT_VERSION = "1.2.1" 
+# Updated to 1.2.2 to match your latest release
+CURRENT_VERSION = "1.2.2" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
@@ -26,13 +26,13 @@ class PaintlyApp:
         
         # Paint Engine State
         self.draw_color = "#6366f1"
-        self.brush_size = 6
-        self.brush_flow = 0.6    # Simulates opacity/density
+        self.brush_size = 10
+        self.brush_flow = 0.6    
         self.brush_type = "Ink" 
         self.stroke_history = [] 
         self.is_replaying = False
         
-        # Stabilizer factor (0.1 = very heavy/smooth, 1.0 = raw input)
+        # Stabilizer factor
         self.stabilize_factor = 0.15 
         
         self.setup_ui()
@@ -63,7 +63,6 @@ class PaintlyApp:
 
         tk.Label(self.header, text=f"Paintly Studio v{CURRENT_VERSION}", fg=self.clr_accent, bg=self.clr_side, font=("Segoe UI", 14, "bold")).pack(side="left", padx=25)
         
-        # Update Button
         self.update_btn = tk.Button(self.header, text="Check for Updates", command=self.manual_update_check, 
                                    bg=self.clr_accent, fg="white", relief="flat", font=("Segoe UI", 9, "bold"), padx=12, pady=5)
         self.update_btn.pack(side="right", padx=20, pady=10)
@@ -91,9 +90,15 @@ class PaintlyApp:
 
         self.add_divider()
 
-        # Engine Sliders
+        # BRUSH ENGINE
         tk.Label(self.tools, text="BRUSH ENGINE", bg=self.clr_side, fg=self.clr_accent, font=("Segoe UI", 8, "bold")).pack(anchor="w")
         
+        # SIZE SLIDER
+        tk.Label(self.tools, text="Brush Size", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8)).pack(anchor="w", pady=(10,0))
+        self.size_slider = tk.Scale(self.tools, from_=1, to=100, orient="horizontal", bg=self.clr_side, highlightthickness=0, fg=self.clr_text)
+        self.size_slider.set(self.brush_size)
+        self.size_slider.pack(fill="x")
+
         tk.Label(self.tools, text="Flow Intensity", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8)).pack(anchor="w", pady=(10,0))
         self.flow_slider = tk.Scale(self.tools, from_=0.1, to=1.0, resolution=0.1, orient="horizontal", bg=self.clr_side, highlightthickness=0, fg=self.clr_text)
         self.flow_slider.set(self.brush_flow)
@@ -145,8 +150,10 @@ class PaintlyApp:
     def paint(self, event):
         if self.is_replaying: return
         
-        # Weighted Smoothing (Stabilization)
+        current_sz = self.size_slider.get()
         alpha = self.stab_slider.get()
+        
+        # Stabilizer
         cur_x = alpha * event.x + (1 - alpha) * self.last_x
         cur_y = alpha * event.y + (1 - alpha) * self.last_y
         
@@ -154,23 +161,19 @@ class PaintlyApp:
         flow = self.flow_slider.get()
         
         if self.brush_type == "Soft":
-            # Multiple layers to simulate a soft airbrush
             for i in range(3):
-                sz = self.brush_size + (i * 4)
+                sz = current_sz + (i * 4)
                 self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=sz, fill=color, capstyle=tk.ROUND, smooth=True)
         elif self.brush_type == "Spray":
-            # Randomized particles based on flow intensity
             for _ in range(int(15 * flow)):
-                offset = self.brush_size * 2
+                offset = current_sz * 2
                 sx = cur_x + random.randint(-offset, offset)
                 sy = cur_y + random.randint(-offset, offset)
                 self.canvas.create_oval(sx, sy, sx+1, sy+1, fill=color, outline="")
         else:
-            # Standard Ink / Pencil
-            self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=self.brush_size, fill=color, capstyle=tk.ROUND, smooth=True)
+            self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=current_sz, fill=color, capstyle=tk.ROUND, smooth=True)
 
-        # Store for Replay
-        self.stroke_history.append({'coords': (self.last_x, self.last_y, cur_x, cur_y), 'color': color, 'size': self.brush_size, 'type': self.brush_type})
+        self.stroke_history.append({'coords': (self.last_x, self.last_y, cur_x, cur_y), 'color': color, 'size': current_sz, 'type': self.brush_type})
         self.last_x, self.last_y = cur_x, cur_y
 
     def stop_draw(self, event): pass
@@ -195,9 +198,9 @@ class PaintlyApp:
 
     def manual_update_check(self):
         try:
-            # Cache Buster ensures we get the newest file from GitHub
-            cb = random.randint(1000, 9999)
-            r = requests.get(f"{VERSION_URL}?cb={cb}", timeout=5)
+            # Enhanced Cache Buster
+            cb = random.randint(100000, 999999)
+            r = requests.get(f"{VERSION_URL}?nocache={cb}", timeout=5)
             if r.status_code == 200:
                 remote_v = r.text.strip()
                 remote_parts = [int(p) for p in remote_v.split('.')]
@@ -207,14 +210,14 @@ class PaintlyApp:
                     if messagebox.askyesno("Update", f"New Version {remote_v} found! Upgrade now?"):
                         self.do_update()
                 else: 
-                    messagebox.showinfo("Paintly", f"Current version v{CURRENT_VERSION} is the latest.")
+                    messagebox.showinfo("Paintly", f"v{CURRENT_VERSION} is current.")
         except Exception as e:
-            messagebox.showerror("Error", f"Could not check for updates: {e}")
+            messagebox.showerror("Error", f"Update check failed: {e}")
 
     def do_update(self):
         try:
-            cb = random.randint(1000, 9999)
-            new_code = requests.get(f"{UPDATE_URL}?cb={cb}").text
+            cb = random.randint(100000, 999999)
+            new_code = requests.get(f"{UPDATE_URL}?nocache={cb}").text
             with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
                 f.write(new_code)
             os.execl(sys.executable, sys.executable, *sys.argv)
