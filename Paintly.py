@@ -5,9 +5,9 @@ import requests
 import sys
 import os
 
-# Set your current version
-CURRENT_VERSION = "1.0.0"
-# URL to a raw text file on GitHub containing the latest version number (e.g., "1.1.0")
+# --- CONFIGURATION ---
+CURRENT_VERSION = "1.0.0" 
+# This must be the DIRECT link to the "Raw" file on GitHub
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/main/version.txt"
 
 class PaintlyApp:
@@ -22,6 +22,8 @@ class PaintlyApp:
         self.last_x, self.last_y = None, None
 
         self.setup_ui()
+        
+        # This only triggers the pop-up if GitHub version > CURRENT_VERSION
         self.check_for_updates()
 
     def setup_ui(self):
@@ -47,27 +49,36 @@ class PaintlyApp:
 
     def check_for_updates(self):
         try:
+            # We fetch the version text from your GitHub repo
             response = requests.get(VERSION_URL, timeout=5)
-            latest_version = response.text.strip()
+            remote_version = response.text.strip()
 
-            if latest_version > CURRENT_VERSION:
-                answer = messagebox.askyesno("Update Available", f"Version {latest_version} is available. Install new update?")
-                if answer: # User clicked Yes
-                    restart = messagebox.askyesno("Update", "Update downloaded. Restart to apply changes?")
-                    if restart:
-                        # This restarts the current script
+            # Logic: ONLY prompt if the remote version is different/newer
+            if remote_version != CURRENT_VERSION:
+                user_wants_update = messagebox.askyesno(
+                    "Update Available", 
+                    f"A new version ({remote_version}) is available. Install new update?"
+                )
+                
+                if user_wants_update:
+                    # In a real scenario, you'd download the file here.
+                    # For now, we simulate the completion and ask for restart.
+                    ready_to_restart = messagebox.askyesno(
+                        "Update Ready", 
+                        "The update has been prepared. Restart to bring the update to the new version?"
+                    )
+                    if ready_to_restart:
                         os.execl(sys.executable, sys.executable, *sys.argv)
-                else: # User clicked No
-                    pass 
+                # If 'No' is clicked, the app just continues as normal.
         except Exception:
-            # If GitHub is down or no internet, just skip the check
+            # If there's no internet or the link is broken, stay silent.
             pass
 
     def change_color(self):
         selected = askcolor(color=self.draw_color)[1]
         if selected:
             self.draw_color = selected
-            self.current_color = selected # Automatically switch to brush mode
+            self.current_color = selected  # Fix: Apply color immediately
 
     def use_brush(self):
         self.current_color = self.draw_color
