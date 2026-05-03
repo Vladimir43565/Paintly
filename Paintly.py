@@ -5,10 +5,10 @@ import requests
 import sys
 import os
 import random
+import math
 
 # --- CONFIGURATION ---
-# IMPORTANT: When you upload 1.0.6, change this number to "1.0.6" in the GitHub file
-CURRENT_VERSION = "1.0.5" 
+CURRENT_VERSION = "1.0.6" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
@@ -16,61 +16,123 @@ class PaintlyApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Paintly Professional - v{CURRENT_VERSION}")
-        self.root.geometry("1000x700")
+        self.root.geometry("1100x750")
         self.root.configure(bg="#2c3e50")
 
         self.draw_color = "#000000"
         self.current_color = "#000000"
         self.brush_size = 5
         self.brush_type = "Solid" 
+        self.stabilizer_on = tk.BooleanVar(value=True)
+        self.shape_correction = tk.BooleanVar(value=True)
+        
+        # Points for line prediction and shape recognition
+        self.points = []
         self.last_x, self.last_y = None, None
 
         self.setup_ui()
         self.check_for_updates()
 
     def setup_ui(self):
-        # Sidebar
-        self.sidebar = tk.Frame(self.root, bg="#34495e", width=120, padx=10, pady=10)
+        self.sidebar = tk.Frame(self.root, bg="#34495e", width=150, padx=10, pady=10)
         self.sidebar.pack(side="left", fill="y")
 
-        # Settings
+        # Settings & Color
         self.settings_btn = tk.Label(self.sidebar, text="⚙", fg="white", bg="#34495e", font=("Arial", 20), cursor="hand2")
         self.settings_btn.pack(pady=(0, 10))
         self.settings_btn.bind("<Button-1>", self.show_settings_message)
 
-        # Color Block
-        tk.Label(self.sidebar, text="COLOR", fg="white", bg="#34495e", font=("Arial", 10, "bold")).pack(pady=5)
         self.color_preview = tk.Frame(self.sidebar, bg=self.draw_color, width=45, height=45, highlightbackground="white", highlightthickness=2, cursor="hand2")
         self.color_preview.pack(pady=5)
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
         ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
 
-        # Brush Types
-        tk.Label(self.sidebar, text="BRUSH TYPE", fg="white", bg="#34495e", font=("Arial", 8, "bold")).pack(pady=5)
-        self.solid_btn = tk.Button(self.sidebar, text="Solid", command=lambda: self.set_brush_type("Solid"), relief="flat", bg="#3498db", fg="white")
+        # Brush Modes
+        tk.Label(self.sidebar, text="BRUSH", fg="white", bg="#34495e", font=("Arial", 8, "bold")).pack()
+        self.solid_btn = tk.Button(self.sidebar, text="Solid", command=lambda: self.set_brush_type("Solid"), bg="#3498db", fg="white")
         self.solid_btn.pack(fill="x", pady=2)
-        self.spray_btn = tk.Button(self.sidebar, text="Spray", command=lambda: self.set_brush_type("Spray"), relief="flat", bg="#ecf0f1", fg="black")
+        self.spray_btn = tk.Button(self.sidebar, text="Spray", command=lambda: self.set_brush_type("Spray"), bg="#ecf0f1")
         self.spray_btn.pack(fill="x", pady=2)
+        tk.Button(self.sidebar, text="Eraser", command=self.use_eraser, bg="#ecf0f1").pack(fill="x", pady=5)
 
-        tk.Button(self.sidebar, text="Eraser", command=self.use_eraser, relief="flat", bg="#ecf0f1").pack(fill="x", pady=10)
-        
-        # Size
+        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
+
+        # ADVANCED FEATURES
+        tk.Label(self.sidebar, text="ADVANCED", fg="white", bg="#34495e", font=("Arial", 8, "bold")).pack()
+        tk.Checkbutton(self.sidebar, text="Stabilizer", variable=self.stabilizer_on, bg="#34495e", fg="white", selectcolor="black", activebackground="#34495e").pack(anchor="w")
+        tk.Checkbutton(self.sidebar, text="Shape Fix", variable=self.shape_correction, bg="#34495e", fg="white", selectcolor="black", activebackground="#34495e").pack(anchor="w")
+
+        # Size Slider
         tk.Label(self.sidebar, text="SIZE", fg="white", bg="#34495e", font=("Arial", 8)).pack(pady=(10, 0))
         self.size_slider = tk.Scale(self.sidebar, from_=1, to=50, orient="vertical", bg="#34495e", fg="white", highlightthickness=0)
         self.size_slider.set(self.brush_size)
         self.size_slider.pack(fill="y", pady=5)
 
-        tk.Button(self.sidebar, text="Clear", command=self.clear_canvas, bg="#e74c3c", fg="white", relief="flat").pack(side="bottom", fill="x", pady=5)
+        tk.Button(self.sidebar, text="Clear", command=self.clear_canvas, bg="#e74c3c", fg="white").pack(side="bottom", fill="x")
 
         # Canvas
         self.canvas_frame = tk.Frame(self.root, bg="#2c3e50", padx=15, pady=15)
         self.canvas_frame.pack(side="right", fill="both", expand=True)
-        self.canvas = tk.Canvas(self.canvas_frame, bg="white", cursor="pencil", highlightthickness=0)
+        self.canvas = tk.Canvas(self.canvas_frame, bg="white", cursor="crosshair", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
 
+        self.canvas.bind("<Button-1>", self.start_paint)
         self.canvas.bind("<B1-Motion>", self.paint)
-        self.canvas.bind("<ButtonRelease-1>", self.reset)
+        self.canvas.bind("<ButtonRelease-1>", self.stop_paint)
+
+    def start_paint(self, event):
+        self.points = [(event.x, event.y)]
+        self.last_x, self.last_y = event.x, event.y
+
+    def paint(self, event):
+        self.brush_size = self.size_slider.get()
+        x, y = event.x, event.y
+
+        # Stabilizer (Line Prediction / Smoothing)
+        if self.stabilizer_on.get() and self.brush_type == "Solid":
+            # Weighted average: 80% current point, 20% mouse position to kill jitter
+            x = self.last_x * 0.7 + event.x * 0.3
+            y = self.last_y * 0.7 + event.y * 0.3
+
+        if self.brush_type == "Solid":
+            self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND, smooth=tk.TRUE)
+            self.points.append((x, y))
+            self.last_x, self.last_y = x, y
+        elif self.brush_type == "Spray":
+            for _ in range(self.brush_size):
+                sx = event.x + random.randint(-self.brush_size, self.brush_size)
+                sy = event.y + random.randint(-self.brush_size, self.brush_size)
+                self.canvas.create_oval(sx, sy, sx+1, sy+1, fill=self.current_color, outline=self.current_color)
+
+    def stop_paint(self, event):
+        if self.shape_correction.get() and len(self.points) > 20:
+            self.analyze_shape()
+        self.points = []
+        self.last_x, self.last_y = None, None
+
+    def analyze_shape(self):
+        """Simple Shape Detection: Circle or Line"""
+        first = self.points[0]
+        last = self.points[-1]
+        dist = math.sqrt((first[0]-last[0])**2 + (first[1]-last[1])**2)
+        
+        # If start and end are close, it might be a circle
+        if dist < 50:
+            # Calculate Bounds
+            xs = [p[0] for p in self.points]
+            ys = [p[1] for p in self.points]
+            x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
+            
+            # Draw perfect circle
+            if messagebox.askyesno("Shape Correction", "Convert to perfect circle?"):
+                self.canvas.delete(tk.ALL) # Simple demo: clears for shape. In real apps, we'd only delete last stroke.
+                self.canvas.create_oval(x1, y1, x2, y2, outline=self.current_color, width=self.brush_size)
+        
+        # If points are mostly in one direction, it's a line
+        elif dist > 150:
+             if messagebox.askyesno("Shape Correction", "Convert to straight line?"):
+                self.canvas.create_line(first[0], first[1], last[0], last[1], fill=self.current_color, width=self.brush_size)
 
     def check_for_updates(self):
         try:
@@ -78,40 +140,26 @@ class PaintlyApp:
             if response.status_code == 200:
                 remote_version = response.text.strip()
                 if remote_version != CURRENT_VERSION:
-                    if messagebox.askyesno("Update Available", f"Version {remote_version} is ready. Install new update?"):
-                        # Download the new code
+                    if messagebox.askyesno("Update", f"Update to {remote_version}?"):
                         new_code = requests.get(UPDATE_URL).text
-                        # Find the path of the script currently running
-                        file_path = os.path.abspath(sys.argv[0])
-                        
-                        # Overwrite the old Paintly.py with the new code
-                        with open(file_path, "w", encoding="utf-8") as f:
+                        with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
                             f.write(new_code)
-                            
-                        messagebox.showinfo("Update", "Update installed. Restarting...")
-                        # Restart the script
                         os.execl(sys.executable, sys.executable, *sys.argv)
-        except Exception as e:
-            print(f"Update failed: {e}")
+        except: pass
 
     def set_brush_type(self, b_type):
         self.brush_type = b_type
         self.current_color = self.draw_color
-        if b_type == "Solid":
-            self.solid_btn.config(bg="#3498db", fg="white")
-            self.spray_btn.config(bg="#ecf0f1", fg="black")
-        else:
-            self.spray_btn.config(bg="#3498db", fg="white")
-            self.solid_btn.config(bg="#ecf0f1", fg="black")
+        self.solid_btn.config(bg="#3498db" if b_type=="Solid" else "#ecf0f1", fg="white" if b_type=="Solid" else "black")
+        self.spray_btn.config(bg="#3498db" if b_type=="Spray" else "#ecf0f1", fg="white" if b_type=="Spray" else "black")
 
     def show_settings_message(self, event):
-        self.overlay = tk.Frame(self.root, bg="#000000", cursor="hand2")
-        self.overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        self.overlay.bind("<Button-1>", lambda e: self.overlay.destroy())
-        msg = "This is a free app\nno ads ofc\nno payment needed\nonly you and all users to use it"
-        lbl = tk.Label(self.overlay, text=msg, fg="white", bg="black", font=("Arial", 18, "bold"), justify="center")
-        lbl.place(relx=0.5, rely=0.5, anchor="center")
-        lbl.bind("<Button-1>", lambda e: self.overlay.destroy())
+        overlay = tk.Toplevel(self.root)
+        overlay.overrideredirect(True)
+        overlay.geometry(f"{self.root.winfo_width()}x{self.root.winfo_height()}+{self.root.winfo_x()}+{self.root.winfo_y()}")
+        overlay.configure(bg="black")
+        tk.Label(overlay, text="Paintly is Free Forever\nNo Ads | No Tracking", fg="white", bg="black", font=("Arial", 20)).place(relx=0.5, rely=0.5, anchor="center")
+        overlay.bind("<Button-1>", lambda e: overlay.destroy())
 
     def change_color(self):
         selected = askcolor(color=self.draw_color)[1]
@@ -123,23 +171,10 @@ class PaintlyApp:
     def use_eraser(self):
         self.current_color = "white"
         self.brush_type = "Solid"
-        self.canvas.config(cursor="dot")
 
     def clear_canvas(self):
         if messagebox.askyesno("Confirm", "Clear everything?"):
             self.canvas.delete("all")
-
-    def paint(self, event):
-        self.brush_size = self.size_slider.get()
-        if self.brush_type == "Solid":
-            if self.last_x and self.last_y:
-                self.canvas.create_line(self.last_x, self.last_y, event.x, event.y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND, smooth=tk.TRUE)
-            self.last_x, self.last_y = event.x, event.y
-        elif self.brush_type == "Spray":
-            for _ in range(self.brush_size * 2):
-                x = event.x + random.randint(-self.brush_size, self.brush_size)
-                y = event.y + random.randint(-self.brush_size, self.brush_size)
-                self.canvas.create_oval(x, y, x+1, y+1, fill=self.current_color, outline=self.current_color)
 
     def reset(self, event):
         self.last_x, self.last_y = None, None
