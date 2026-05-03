@@ -7,7 +7,7 @@ import os
 import random
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.8" 
+CURRENT_VERSION = "1.1.9" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
@@ -17,15 +17,10 @@ class PaintlyApp:
         self.root.title(f"Paintly Creative")
         self.root.geometry("1300x900")
         
-        # Color Palette: Modern Slate & Indigo
-        self.clr_bg = "#f0f2f5"       
-        self.clr_side = "#ffffff"     
-        self.clr_accent = "#6366f1"   
-        self.clr_text = "#1e293b"     
-        self.clr_border = "#e2e8f0"   
+        # Theme States
+        self.dark_mode = False
+        self.set_theme_colors()
         
-        self.root.configure(bg=self.clr_bg)
-
         # Drawing State
         self.draw_color = "#1e293b"
         self.current_color = "#1e293b"
@@ -34,12 +29,33 @@ class PaintlyApp:
         self.stroke_history = [] 
         self.is_replaying = False
         
-        # Replay Speed Setting
         self.replay_speed_var = tk.DoubleVar(value=1.0)
         
         self.setup_ui()
 
+    def set_theme_colors(self):
+        if self.dark_mode:
+            self.clr_bg = "#121212"
+            self.clr_side = "#1e1e1e"
+            self.clr_accent = "#818cf8"
+            self.clr_text = "#f8fafc"
+            self.clr_border = "#334155"
+            self.canvas_bg = "#1e1e1e"
+        else:
+            self.clr_bg = "#f0f2f5"
+            self.clr_side = "#ffffff"
+            self.clr_accent = "#6366f1"
+            self.clr_text = "#1e293b"
+            self.clr_border = "#e2e8f0"
+            self.canvas_bg = "#ffffff"
+
     def setup_ui(self):
+        # Clear existing UI for theme switching
+        for widget in self.root.winfo_children():
+            widget.destroy()
+            
+        self.root.configure(bg=self.clr_bg)
+
         # 1. HEADER
         self.header = tk.Frame(self.root, bg=self.clr_side, height=60, highlightthickness=1, highlightbackground=self.clr_border)
         self.header.pack(side="top", fill="x")
@@ -75,9 +91,8 @@ class PaintlyApp:
 
         self.add_sep()
 
-        # Replay Controls
-        tk.Label(self.tools, text="REPLAY SPEED", bg=self.clr_side, fg="#64748b", font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
-        
+        # REPLAY SPEED (Fixed for Super Fast 5x)
+        tk.Label(self.tools, text="REPLAY SPEED", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
         speed_frame = tk.Frame(self.tools, bg=self.clr_side)
         speed_frame.pack(fill="x")
         
@@ -91,28 +106,33 @@ class PaintlyApp:
 
         self.add_sep()
 
-        # Size Slider
-        tk.Label(self.tools, text="Brush Size", bg=self.clr_side, fg="#64748b", font=("Segoe UI", 8)).pack()
-        self.size_slider = tk.Scale(self.tools, from_=1, to=50, orient="horizontal", bg=self.clr_side, highlightthickness=0)
-        self.size_slider.set(self.brush_size)
-        self.size_slider.pack(fill="x", pady=5)
+        # SETTINGS (Theme Toggle)
+        tk.Label(self.tools, text="SETTINGS", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack()
+        theme_text = "🌙 Dark Mode" if not self.dark_mode else "☀️ Light Mode"
+        tk.Button(self.tools, text=theme_text, command=self.toggle_theme, bg=self.clr_bg, 
+                  fg=self.clr_text, relief="flat", font=("Segoe UI", 9)).pack(fill="x", pady=5)
 
         # 3. CANVAS
         self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=10, pady=10)
         self.canvas_frame.pack(side="right", fill="both", expand=True)
-        self.canvas = tk.Canvas(self.canvas_frame, bg="#ffffff", highlightthickness=1, highlightbackground=self.clr_border, cursor="plus")
+        self.canvas = tk.Canvas(self.canvas_frame, bg=self.canvas_bg, highlightthickness=1, highlightbackground=self.clr_border, cursor="plus")
         self.canvas.pack(fill="both", expand=True)
 
         self.canvas.bind("<Button-1>", self.start_draw)
         self.canvas.bind("<B1-Motion>", self.paint)
         self.canvas.bind("<ButtonRelease-1>", self.stop_draw)
 
+    def toggle_theme(self):
+        self.dark_mode = not self.dark_mode
+        self.set_theme_colors()
+        self.setup_ui()
+
     def add_sep(self):
         tk.Frame(self.tools, bg=self.clr_border, height=1).pack(fill="x", pady=15)
 
     def set_brush(self, b_name):
         if b_name == "Eraser":
-            self.current_color = "#ffffff"
+            self.current_color = self.canvas_bg
             self.brush_type = "Ink"
         else:
             self.current_color = self.draw_color
@@ -120,21 +140,11 @@ class PaintlyApp:
 
     def paint(self, event):
         if self.is_replaying: return
-        self.brush_size = self.size_slider.get()
         x, y = event.x, event.y
-        
         if self.brush_type == "Pencil":
-            self.canvas.create_line(self.last_x, self.last_y, x, y, width=1, fill="#94a3b8")
-        elif self.brush_type == "Ink":
+            self.canvas.create_line(self.last_x, self.last_y, x, y, width=1, fill=self.clr_text)
+        else:
             self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND, smooth=True)
-        elif self.brush_type == "Soft":
-            for i in range(2, 0, -1):
-                self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size+(i*3), fill=self.current_color, capstyle=tk.ROUND)
-        elif self.brush_type == "Spray":
-            for _ in range(8):
-                sx = x + random.randint(-self.brush_size*2, self.brush_size*2)
-                sy = y + random.randint(-self.brush_size*2, self.brush_size*2)
-                self.canvas.create_oval(sx, sy, sx+1, sy+1, fill=self.current_color, outline="")
 
         self.stroke_history.append({'coords': (self.last_x, self.last_y, x, y), 'color': self.current_color, 'size': self.brush_size})
         self.last_x, self.last_y = x, y
@@ -147,15 +157,19 @@ class PaintlyApp:
         self.is_replaying = True
         self.canvas.delete("all")
         
-        base_delay = 10
         multiplier = self.replay_speed_var.get()
-        calculated_delay = max(1, int(base_delay / multiplier))
+        # 5x is now optimized to 1ms delay or even processing multiple strokes per tick
+        delay = max(1, int(10 / multiplier))
+        strokes_per_tick = 1 if multiplier < 5 else 3 # Batch strokes at 5x for "super fast" feel
 
         def play(i):
             if i < len(self.stroke_history):
-                s = self.stroke_history[i]
-                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
-                self.root.after(calculated_delay, lambda: play(i+1))
+                for _ in range(strokes_per_tick):
+                    if i < len(self.stroke_history):
+                        s = self.stroke_history[i]
+                        self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
+                        i += 1
+                self.root.after(delay, lambda: play(i))
             else: self.is_replaying = False
         play(0)
 
@@ -168,37 +182,25 @@ class PaintlyApp:
 
     def manual_update_check(self):
         try:
-            # Bypass cache to avoid seeing old 1.1.4 data
             cache_buster = f"?t={random.randint(1, 999999)}"
             r = requests.get(VERSION_URL + cache_buster, timeout=5)
-            
             if r.status_code == 200:
                 remote_v = r.text.strip()
                 remote_parts = [int(p) for p in remote_v.split('.')]
                 local_parts = [int(p) for p in CURRENT_VERSION.split('.')]
-
-                # Only trigger if GitHub version is HIGHER than local
                 if remote_parts > local_parts:
-                    if messagebox.askyesno("Update Found", f"New version {remote_v} available. Update?"):
+                    if messagebox.askyesno("Update", f"New version {remote_v} available. Update?"):
                         self.do_update()
-                else:
-                    messagebox.showinfo("Paintly", f"Up to date! (v{CURRENT_VERSION})")
-            else:
-                messagebox.showerror("Error", "Server unreachable.")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed: {e}")
+                else: messagebox.showinfo("Paintly", f"Up to date! (v{CURRENT_VERSION})")
+        except: pass
 
     def do_update(self):
         try:
-            cache_buster = f"?t={random.randint(1, 999999)}"
-            new_code = requests.get(UPDATE_URL + cache_buster).text
-            if "class PaintlyApp" in new_code:
-                with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
-                    f.write(new_code)
-                messagebox.showinfo("Success", "Updated! Restarting...")
-                os.execl(sys.executable, sys.executable, *sys.argv)
-        except Exception as e:
-            messagebox.showerror("Failed", f"Error: {e}")
+            new_code = requests.get(UPDATE_URL + f"?t={random.randint(1,999)}").text
+            with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
+                f.write(new_code)
+            os.execl(sys.executable, sys.executable, *sys.argv)
+        except: pass
 
 if __name__ == "__main__":
     root = tk.Tk()
