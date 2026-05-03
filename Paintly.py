@@ -8,151 +8,141 @@ import random
 import math
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.3" 
+CURRENT_VERSION = "1.1.4" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
 class PaintlyApp:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"Paintly Professional - v{CURRENT_VERSION}")
-        self.root.geometry("1200x850")
-        self.root.configure(bg="#2c3e50")
+        self.root.title(f"Paintly Pro — {CURRENT_VERSION}")
+        self.root.geometry("1250x850")
+        
+        # Theme Colors (Modern Dark)
+        self.bg_main = "#1a1a1a"
+        self.bg_panel = "#252526"
+        self.accent = "#007acc"
+        self.text_color = "#cccccc"
+        
+        self.root.configure(bg=self.bg_main)
 
         # Drawing State
-        self.draw_color = "#000000"
-        self.current_color = "#000000"
+        self.draw_color = "#ffffff"
+        self.current_color = "#ffffff"
         self.brush_size = 5
-        self.brush_type = "Solid" 
-        
-        # Stroke Recording
+        self.brush_type = "Ink" 
         self.stroke_history = [] 
         self.is_replaying = False
         
-        self.stabilizer_on = tk.BooleanVar(value=True)
-        
-        self.points = []
-        self.last_x, self.last_y = None, None
-
         self.setup_ui()
 
     def setup_ui(self):
-        # Sidebar
-        self.sidebar = tk.Frame(self.root, bg="#34495e", width=200, padx=10, pady=10)
-        self.sidebar.pack(side="left", fill="y")
+        # 1. TOP BAR (Clean & Modern)
+        self.top_bar = tk.Frame(self.root, bg=self.bg_panel, height=50, pady=5)
+        self.top_bar.pack(side="top", fill="x")
 
-        # Color Preview
-        self.color_preview = tk.Frame(self.sidebar, bg=self.draw_color, width=45, height=45, highlightbackground="white", highlightthickness=2, cursor="hand2")
-        self.color_preview.pack(pady=5)
+        title_label = tk.Label(self.top_bar, text="PAINTLY PRO", fg=self.accent, bg=self.bg_panel, font=("Impact", 18))
+        title_label.pack(side="left", padx=20)
+
+        # Update Button moved to top right
+        self.update_btn = tk.Button(self.top_bar, text="Check for Update", command=self.manual_update_check, 
+                                   bg=self.bg_main, fg=self.text_color, relief="flat", padx=10)
+        self.update_btn.pack(side="right", padx=10)
+
+        # 2. LEFT FLOATING-STYLE PANEL
+        self.tool_panel = tk.Frame(self.root, bg=self.bg_panel, width=70, padx=10, pady=20)
+        self.tool_panel.pack(side="left", fill="y", padx=10, pady=10)
+
+        # Color Circle
+        self.color_preview = tk.Frame(self.tool_panel, bg=self.draw_color, width=40, height=40, cursor="hand2")
+        self.color_preview.pack(pady=10)
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
-        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
+        self.add_tool_sep()
 
-        # UPDATE SYSTEM (New Button Logic)
-        tk.Label(self.sidebar, text="SYSTEM", fg="#bdc3c7", bg="#34495e", font=("Arial", 8, "bold")).pack()
-        self.update_btn = tk.Button(self.sidebar, text="🔄 Check for Update", command=self.manual_update_check, bg="#7f8c8d", fg="white", relief="flat")
-        self.update_btn.pack(fill="x", pady=5)
+        # BRUSH TYPES (New System)
+        brushes = [
+            ("✏️", "Pencil"),
+            ("🖌️", "Soft"),
+            ("🖋️", "Ink"),
+            ("🌈", "Gradient"),
+            ("💥", "Spray")
+        ]
+        for icon, b_type in brushes:
+            btn = tk.Button(self.tool_panel, text=icon, command=lambda t=b_type: self.set_brush_type(t),
+                            bg=self.bg_panel, fg="white", font=("Arial", 14), relief="flat", activebackground=self.accent)
+            btn.pack(fill="x", pady=5)
 
-        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
+        self.add_tool_sep()
 
-        # REPLAY SYSTEM
-        tk.Label(self.sidebar, text="REPLAY ENGINE", fg="#f1c40f", bg="#34495e", font=("Arial", 8, "bold")).pack()
-        self.replay_btn = tk.Button(self.sidebar, text="▶ Watch Replay", command=self.run_replay, bg="#27ae60", fg="white", relief="flat")
-        self.replay_btn.pack(fill="x", pady=2)
+        # Replay
+        tk.Button(self.tool_panel, text="▶", command=self.run_replay, bg=self.bg_panel, fg="#f1c40f", 
+                  font=("Arial", 14), relief="flat").pack(fill="x", pady=5)
 
-        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
-
-        # Tools
-        tk.Label(self.sidebar, text="BRUSH TOOLS", fg="white", bg="#34495e", font=("Arial", 8, "bold")).pack()
-        tk.Button(self.sidebar, text="Solid Brush", command=lambda: self.set_brush_type("Solid"), bg="#3498db", fg="white", relief="flat").pack(fill="x", pady=2)
-        tk.Button(self.sidebar, text="Eraser", command=self.use_eraser, bg="#ecf0f1", relief="flat").pack(fill="x", pady=2)
-
-        # Size Slider
-        self.size_slider = tk.Scale(self.sidebar, from_=1, to=50, orient="horizontal", bg="#34495e", fg="white", highlightthickness=0)
-        self.size_slider.set(self.brush_size)
-        self.size_slider.pack(fill="x", pady=10)
-
-        tk.Button(self.sidebar, text="Clear All", command=self.clear_canvas, bg="#e74c3c", fg="white", relief="flat").pack(side="bottom", fill="x")
-
-        # Canvas
-        self.canvas_frame = tk.Frame(self.root, bg="#2c3e50", padx=15, pady=15)
-        self.canvas_frame.pack(side="right", fill="both", expand=True)
-        self.canvas = tk.Canvas(self.canvas_frame, bg="white", cursor="crosshair", highlightthickness=0)
+        # 3. CANVAS (Rounded Container)
+        self.canvas_container = tk.Frame(self.root, bg=self.bg_main, padx=10, pady=10)
+        self.canvas_container.pack(side="right", fill="both", expand=True)
+        
+        self.canvas = tk.Canvas(self.canvas_container, bg="#ffffff", highlightthickness=0, cursor="pencil")
         self.canvas.pack(fill="both", expand=True)
 
         self.canvas.bind("<Button-1>", self.start_draw)
         self.canvas.bind("<B1-Motion>", self.paint)
         self.canvas.bind("<ButtonRelease-1>", self.stop_draw)
 
-    def manual_update_check(self):
-        """Triggered only when the user clicks the button"""
-        self.update_btn.config(text="Checking...", state="disabled")
-        try:
-            r = requests.get(VERSION_URL, timeout=5, headers={'Cache-Control': 'no-cache'})
-            if r.status_code == 200:
-                remote_v = r.text.strip()
-                if remote_v != CURRENT_VERSION:
-                    if messagebox.askyesno("Update Found", f"Version {remote_v} is available. Download and restart?"):
-                        self.do_update()
-                else:
-                    messagebox.showinfo("Paintly", "You are using the latest version.")
-            else:
-                messagebox.showerror("Error", "Could not reach the update server.")
-        except Exception as e:
-            messagebox.showerror("Error", f"Connection failed: {e}")
-        
-        self.update_btn.config(text="🔄 Check for Update", state="normal")
+        # 4. BOTTOM STATUS BAR
+        self.status_bar = tk.Frame(self.root, bg=self.accent, height=25)
+        self.status_bar.pack(side="bottom", fill="x")
+        self.status_label = tk.Label(self.status_bar, text=f"Brush: {self.brush_type} | Size: {self.brush_size}", 
+                                    fg="white", bg=self.accent, font=("Arial", 9))
+        self.status_label.pack(side="left", padx=10)
 
-    def do_update(self):
-        try:
-            new_code = requests.get(UPDATE_URL).text
-            if "class PaintlyApp" in new_code:
-                with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
-                    f.write(new_code)
-                # Restart the app
-                os.execl(sys.executable, sys.executable, *sys.argv)
-        except Exception as e:
-            messagebox.showerror("Update Failed", f"Error: {e}")
+    def add_tool_sep(self):
+        tk.Frame(self.tool_panel, bg="#444444", height=2).pack(fill="x", pady=10)
 
-    def start_draw(self, event):
-        if self.is_replaying: return
-        self.points = [(event.x, event.y)]
-        self.last_x, self.last_y = event.x, event.y
+    def set_brush_type(self, b_type):
+        self.brush_type = b_type
+        self.status_label.config(text=f"Brush: {self.brush_type} | Size: {self.brush_size}")
 
     def paint(self, event):
         if self.is_replaying: return
-        self.brush_size = self.size_slider.get()
         x, y = event.x, event.y
+        
+        if self.brush_type == "Pencil":
+            # Thin, slightly transparent look
+            self.canvas.create_line(self.last_x, self.last_y, x, y, width=1, fill="#555555", capstyle=tk.BUTT)
+        
+        elif self.brush_type == "Ink":
+            # Sharp, bold
+            self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND)
 
-        if self.stabilizer_on.get():
-            x = self.last_x * 0.7 + event.x * 0.3
-            y = self.last_y * 0.7 + event.y * 0.3
+        elif self.brush_type == "Soft":
+            # Mimic soft edges by drawing multiple lines with decreasing width
+            for i in range(3, 0, -1):
+                alpha_w = self.brush_size + (i * 2)
+                self.canvas.create_line(self.last_x, self.last_y, x, y, width=alpha_w, fill=self.current_color, capstyle=tk.ROUND)
 
-        self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND, smooth=tk.TRUE)
-        self.stroke_history.append({
-            'coords': (self.last_x, self.last_y, x, y),
-            'color': self.current_color,
-            'size': self.brush_size
-        })
+        elif self.brush_type == "Spray":
+            for _ in range(10):
+                sx = x + random.randint(-self.brush_size*2, self.brush_size*2)
+                sy = y + random.randint(-self.brush_size*2, self.brush_size*2)
+                self.canvas.create_oval(sx, sy, sx+1, sy+1, fill=self.current_color, outline=self.current_color)
+
+        elif self.brush_type == "Gradient":
+            # Shifts color slightly as you move
+            r, g, b = self.root.winfo_rgb(self.current_color)
+            r = (r // 256 + random.randint(-10, 10)) % 255
+            new_col = f'#{r:02x}{g // 256:02x}{b // 256:02x}'
+            self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=new_col)
+
+        self.stroke_history.append({'coords': (self.last_x, self.last_y, x, y), 'color': self.current_color, 'size': self.brush_size, 'type': self.brush_type})
         self.last_x, self.last_y = x, y
 
+    def start_draw(self, event):
+        self.last_x, self.last_y = event.x, event.y
+
     def stop_draw(self, event):
-        self.points = []
-
-    def run_replay(self):
-        if not self.stroke_history or self.is_replaying: return
-        self.is_replaying = True
-        self.canvas.delete("all")
-        
-        def play_step(index):
-            if index < len(self.stroke_history):
-                s = self.stroke_history[index]
-                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
-                self.root.after(5, lambda: play_step(index + 1))
-            else:
-                self.is_replaying = False
-
-        play_step(0)
+        self.last_x, self.last_y = None, None
 
     def change_color(self):
         selected = askcolor(color=self.draw_color)[1]
@@ -161,16 +151,36 @@ class PaintlyApp:
             self.current_color = selected
             self.color_preview.configure(bg=selected)
 
-    def set_brush_type(self, b_type):
-        self.current_color = self.draw_color
+    def manual_update_check(self):
+        try:
+            r = requests.get(VERSION_URL, timeout=5)
+            if r.status_code == 200:
+                if r.text.strip() != CURRENT_VERSION:
+                    if messagebox.askyesno("Update", "New version found! Download?"):
+                        self.do_update()
+                else:
+                    messagebox.showinfo("Update", "Up to date!")
+        except: pass
 
-    def use_eraser(self):
-        self.current_color = "white"
+    def do_update(self):
+        try:
+            new_code = requests.get(UPDATE_URL).text
+            with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
+                f.write(new_code)
+            os.execl(sys.executable, sys.executable, *sys.argv)
+        except: pass
 
-    def clear_canvas(self):
-        if messagebox.askyesno("Clear", "Clear drawing and history?"):
-            self.canvas.delete("all")
-            self.stroke_history = []
+    def run_replay(self):
+        if not self.stroke_history or self.is_replaying: return
+        self.is_replaying = True
+        self.canvas.delete("all")
+        def play_step(index):
+            if index < len(self.stroke_history):
+                s = self.stroke_history[index]
+                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
+                self.root.after(5, lambda: play_step(index + 1))
+            else: self.is_replaying = False
+        play_step(0)
 
 if __name__ == "__main__":
     root = tk.Tk()
