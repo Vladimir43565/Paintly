@@ -7,7 +7,7 @@ import os
 import random
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.7" 
+CURRENT_VERSION = "1.1.8" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
@@ -17,7 +17,7 @@ class PaintlyApp:
         self.root.title(f"Paintly Creative")
         self.root.geometry("1300x900")
         
-        # Color Palette
+        # Color Palette: Modern Slate & Indigo
         self.clr_bg = "#f0f2f5"       
         self.clr_side = "#ffffff"     
         self.clr_accent = "#6366f1"   
@@ -34,7 +34,7 @@ class PaintlyApp:
         self.stroke_history = [] 
         self.is_replaying = False
         
-        # REPLAY SPEED SETTINGS (New in 1.1.7)
+        # Replay Speed Setting
         self.replay_speed_var = tk.DoubleVar(value=1.0)
         
         self.setup_ui()
@@ -51,7 +51,7 @@ class PaintlyApp:
                                    bg=self.clr_bg, fg=self.clr_text, relief="flat", padx=15, font=("Segoe UI", 9))
         self.update_btn.pack(side="right", padx=20, pady=12)
 
-        # 2. FLOATING LEFT TOOLBAR
+        # 2. TOOLBAR
         self.toolbar_container = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=20)
         self.toolbar_container.pack(side="left", fill="y")
 
@@ -75,7 +75,7 @@ class PaintlyApp:
 
         self.add_sep()
 
-        # REPLAY ENGINE (Updated in 1.1.7)
+        # Replay Controls
         tk.Label(self.tools, text="REPLAY SPEED", bg=self.clr_side, fg="#64748b", font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
         
         speed_frame = tk.Frame(self.tools, bg=self.clr_side)
@@ -97,7 +97,7 @@ class PaintlyApp:
         self.size_slider.set(self.brush_size)
         self.size_slider.pack(fill="x", pady=5)
 
-        # 3. CANVAS AREA
+        # 3. CANVAS
         self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=10, pady=10)
         self.canvas_frame.pack(side="right", fill="both", expand=True)
         self.canvas = tk.Canvas(self.canvas_frame, bg="#ffffff", highlightthickness=1, highlightbackground=self.clr_border, cursor="plus")
@@ -123,7 +123,6 @@ class PaintlyApp:
         self.brush_size = self.size_slider.get()
         x, y = event.x, event.y
         
-        # Drawing Logic
         if self.brush_type == "Pencil":
             self.canvas.create_line(self.last_x, self.last_y, x, y, width=1, fill="#94a3b8")
         elif self.brush_type == "Ink":
@@ -144,16 +143,13 @@ class PaintlyApp:
     def stop_draw(self, event): self.last_x, self.last_y = None, None
 
     def run_replay(self):
-        """Replays drawing based on selected speed multiplier"""
         if not self.stroke_history or self.is_replaying: return
         self.is_replaying = True
         self.canvas.delete("all")
         
-        # Base delay is 10ms. 
-        # 1x = 10ms delay | 2x = 5ms delay | 5x = 2ms delay
         base_delay = 10
         multiplier = self.replay_speed_var.get()
-        calculated_delay = int(base_delay / multiplier)
+        calculated_delay = max(1, int(base_delay / multiplier))
 
         def play(i):
             if i < len(self.stroke_history):
@@ -172,20 +168,37 @@ class PaintlyApp:
 
     def manual_update_check(self):
         try:
-            r = requests.get(VERSION_URL, timeout=5)
-            if r.status_code == 200 and r.text.strip() != CURRENT_VERSION:
-                if messagebox.askyesno("Update", f"Update to {r.text.strip()}?"):
-                    self.do_update()
-            else: messagebox.showinfo("Paintly", "Latest version active.")
-        except: pass
+            # Bypass cache to avoid seeing old 1.1.4 data
+            cache_buster = f"?t={random.randint(1, 999999)}"
+            r = requests.get(VERSION_URL + cache_buster, timeout=5)
+            
+            if r.status_code == 200:
+                remote_v = r.text.strip()
+                remote_parts = [int(p) for p in remote_v.split('.')]
+                local_parts = [int(p) for p in CURRENT_VERSION.split('.')]
+
+                # Only trigger if GitHub version is HIGHER than local
+                if remote_parts > local_parts:
+                    if messagebox.askyesno("Update Found", f"New version {remote_v} available. Update?"):
+                        self.do_update()
+                else:
+                    messagebox.showinfo("Paintly", f"Up to date! (v{CURRENT_VERSION})")
+            else:
+                messagebox.showerror("Error", "Server unreachable.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed: {e}")
 
     def do_update(self):
         try:
-            new_code = requests.get(UPDATE_URL).text
-            with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
-                f.write(new_code)
-            os.execl(sys.executable, sys.executable, *sys.argv)
-        except: pass
+            cache_buster = f"?t={random.randint(1, 999999)}"
+            new_code = requests.get(UPDATE_URL + cache_buster).text
+            if "class PaintlyApp" in new_code:
+                with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
+                    f.write(new_code)
+                messagebox.showinfo("Success", "Updated! Restarting...")
+                os.execl(sys.executable, sys.executable, *sys.argv)
+        except Exception as e:
+            messagebox.showerror("Failed", f"Error: {e}")
 
 if __name__ == "__main__":
     root = tk.Tk()
