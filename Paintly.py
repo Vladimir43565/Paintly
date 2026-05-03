@@ -7,7 +7,7 @@ import os
 import random
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.6" 
+CURRENT_VERSION = "1.1.7" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
@@ -17,12 +17,12 @@ class PaintlyApp:
         self.root.title(f"Paintly Creative")
         self.root.geometry("1300x900")
         
-        # Color Palette: Slate & Soft White
-        self.clr_bg = "#f0f2f5"       # Light gray-blue background
-        self.clr_side = "#ffffff"     # Pure white panels
-        self.clr_accent = "#6366f1"   # Modern Indigo accent
-        self.clr_text = "#1e293b"     # Slate text
-        self.clr_border = "#e2e8f0"   # Soft border
+        # Color Palette
+        self.clr_bg = "#f0f2f5"       
+        self.clr_side = "#ffffff"     
+        self.clr_accent = "#6366f1"   
+        self.clr_text = "#1e293b"     
+        self.clr_border = "#e2e8f0"   
         
         self.root.configure(bg=self.clr_bg)
 
@@ -34,11 +34,14 @@ class PaintlyApp:
         self.stroke_history = [] 
         self.is_replaying = False
         
+        # REPLAY SPEED SETTINGS (New in 1.1.7)
+        self.replay_speed_var = tk.DoubleVar(value=1.0)
+        
         self.setup_ui()
 
     def setup_ui(self):
         # 1. HEADER
-        self.header = tk.Frame(self.root, bg=self.clr_side, height=60, bd=0, highlightthickness=1, highlightbackground=self.clr_border)
+        self.header = tk.Frame(self.root, bg=self.clr_side, height=60, highlightthickness=1, highlightbackground=self.clr_border)
         self.header.pack(side="top", fill="x")
 
         title = tk.Label(self.header, text="Paintly", fg=self.clr_accent, bg=self.clr_side, font=("Segoe UI", 20, "bold"))
@@ -55,47 +58,49 @@ class PaintlyApp:
         self.tools = tk.Frame(self.toolbar_container, bg=self.clr_side, padx=10, pady=15, highlightthickness=1, highlightbackground=self.clr_border)
         self.tools.pack(fill="y")
 
-        # Active Color Circle (Larger and centered)
-        self.color_outer = tk.Frame(self.tools, bg=self.clr_border, width=48, height=48, pady=2, padx=2)
-        self.color_outer.pack(pady=10)
-        self.color_preview = tk.Frame(self.color_outer, bg=self.draw_color, width=44, height=44, cursor="hand2")
-        self.color_preview.pack()
+        # Color Preview
+        self.color_preview = tk.Frame(self.tools, bg=self.draw_color, width=44, height=44, cursor="hand2", highlightthickness=1, highlightbackground=self.clr_border)
+        self.color_preview.pack(pady=10)
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
         self.add_sep()
 
-        # Brushes with modern styling
-        brushes = [
-            ("Pencil", "✏"), ("Soft", "🖌"), ("Ink", "🖋"), ("Spray", "✨"), ("Eraser", "🧽")
-        ]
+        # Brushes
+        brushes = [("Pencil", "✏"), ("Soft", "🖌"), ("Ink", "🖋"), ("Spray", "✨"), ("Eraser", "🧽")]
         for name, icon in brushes:
             btn = tk.Button(self.tools, text=f"{icon}  {name}", command=lambda n=name: self.set_brush(n),
                             bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 10), 
-                            relief="flat", anchor="w", padx=10, pady=8, activebackground=self.clr_bg)
+                            relief="flat", anchor="w", padx=10, pady=6, activebackground=self.clr_bg)
             btn.pack(fill="x")
 
         self.add_sep()
 
-        # Replay Button
-        tk.Button(self.tools, text="🎬 Watch Replay", command=self.run_replay, bg=self.clr_accent, 
-                  fg="white", font=("Segoe UI", 10, "bold"), relief="flat", pady=8).pack(fill="x", pady=5)
+        # REPLAY ENGINE (Updated in 1.1.7)
+        tk.Label(self.tools, text="REPLAY SPEED", bg=self.clr_side, fg="#64748b", font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
+        
+        speed_frame = tk.Frame(self.tools, bg=self.clr_side)
+        speed_frame.pack(fill="x")
+        
+        for spd in [1, 2, 5]:
+            tk.Radiobutton(speed_frame, text=f"{spd}x", variable=self.replay_speed_var, value=spd,
+                           bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8),
+                           indicatoron=0, selectcolor=self.clr_accent, relief="flat", padx=5).pack(side="left", expand=True)
 
-        # Size Slider integrated into toolbar
-        tk.Label(self.tools, text="Brush Size", bg=self.clr_side, fg="#64748b", font=("Segoe UI", 8)).pack(pady=(10,0))
-        self.size_slider = tk.Scale(self.tools, from_=1, to=50, orient="horizontal", bg=self.clr_side, 
-                                    highlightthickness=0, troughcolor=self.clr_bg, activebackground=self.clr_accent)
+        tk.Button(self.tools, text="🎬 Watch Replay", command=self.run_replay, bg=self.clr_accent, 
+                  fg="white", font=("Segoe UI", 10, "bold"), relief="flat", pady=8).pack(fill="x", pady=(10,5))
+
+        self.add_sep()
+
+        # Size Slider
+        tk.Label(self.tools, text="Brush Size", bg=self.clr_side, fg="#64748b", font=("Segoe UI", 8)).pack()
+        self.size_slider = tk.Scale(self.tools, from_=1, to=50, orient="horizontal", bg=self.clr_side, highlightthickness=0)
         self.size_slider.set(self.brush_size)
         self.size_slider.pack(fill="x", pady=5)
 
         # 3. CANVAS AREA
         self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=10, pady=10)
         self.canvas_frame.pack(side="right", fill="both", expand=True)
-        
-        # Shadow effect for canvas
-        self.canvas_border = tk.Frame(self.canvas_frame, bg=self.clr_border, padx=1, pady=1)
-        self.canvas_border.pack(fill="both", expand=True)
-        
-        self.canvas = tk.Canvas(self.canvas_border, bg="#ffffff", highlightthickness=0, cursor="plus")
+        self.canvas = tk.Canvas(self.canvas_frame, bg="#ffffff", highlightthickness=1, highlightbackground=self.clr_border, cursor="plus")
         self.canvas.pack(fill="both", expand=True)
 
         self.canvas.bind("<Button-1>", self.start_draw)
@@ -118,6 +123,7 @@ class PaintlyApp:
         self.brush_size = self.size_slider.get()
         x, y = event.x, event.y
         
+        # Drawing Logic
         if self.brush_type == "Pencil":
             self.canvas.create_line(self.last_x, self.last_y, x, y, width=1, fill="#94a3b8")
         elif self.brush_type == "Ink":
@@ -137,6 +143,26 @@ class PaintlyApp:
     def start_draw(self, event): self.last_x, self.last_y = event.x, event.y
     def stop_draw(self, event): self.last_x, self.last_y = None, None
 
+    def run_replay(self):
+        """Replays drawing based on selected speed multiplier"""
+        if not self.stroke_history or self.is_replaying: return
+        self.is_replaying = True
+        self.canvas.delete("all")
+        
+        # Base delay is 10ms. 
+        # 1x = 10ms delay | 2x = 5ms delay | 5x = 2ms delay
+        base_delay = 10
+        multiplier = self.replay_speed_var.get()
+        calculated_delay = int(base_delay / multiplier)
+
+        def play(i):
+            if i < len(self.stroke_history):
+                s = self.stroke_history[i]
+                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
+                self.root.after(calculated_delay, lambda: play(i+1))
+            else: self.is_replaying = False
+        play(0)
+
     def change_color(self):
         selected = askcolor(color=self.draw_color)[1]
         if selected:
@@ -148,9 +174,9 @@ class PaintlyApp:
         try:
             r = requests.get(VERSION_URL, timeout=5)
             if r.status_code == 200 and r.text.strip() != CURRENT_VERSION:
-                if messagebox.askyesno("Update", f"A new version ({r.text.strip()}) is available. Update?"):
+                if messagebox.askyesno("Update", f"Update to {r.text.strip()}?"):
                     self.do_update()
-            else: messagebox.showinfo("Paintly", "You are on the latest version.")
+            else: messagebox.showinfo("Paintly", "Latest version active.")
         except: pass
 
     def do_update(self):
@@ -160,18 +186,6 @@ class PaintlyApp:
                 f.write(new_code)
             os.execl(sys.executable, sys.executable, *sys.argv)
         except: pass
-
-    def run_replay(self):
-        if not self.stroke_history or self.is_replaying: return
-        self.is_replaying = True
-        self.canvas.delete("all")
-        def play(i):
-            if i < len(self.stroke_history):
-                s = self.stroke_history[i]
-                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
-                self.root.after(3, lambda: play(i+1))
-            else: self.is_replaying = False
-        play(0)
 
 if __name__ == "__main__":
     root = tk.Tk()
