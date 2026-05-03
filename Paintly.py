@@ -7,7 +7,7 @@ import os
 import random
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.5" 
+CURRENT_VERSION = "1.1.6" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
