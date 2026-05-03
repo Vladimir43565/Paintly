@@ -8,7 +8,7 @@ import random
 import math
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.0.7" 
+CURRENT_VERSION = "1.0.8" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 
