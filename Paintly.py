@@ -6,9 +6,10 @@ import sys
 import os
 import random
 import webbrowser
+import math
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.2.0" 
+CURRENT_VERSION = "26.0" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
@@ -16,169 +17,161 @@ DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
 class PaintlyApp:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"Paintly Creative")
-        self.root.geometry("1300x900")
+        self.root.title(f"Paintly Next Gen")
+        self.root.geometry("1400x900")
         
-        # Theme States
-        self.dark_mode = False
+        # Theme & Engine States
+        self.dark_mode = True  # Defaulting to Dark for v26
         self.set_theme_colors()
         
-        # Drawing State
-        self.draw_color = "#1e293b"
-        self.current_color = "#1e293b"
-        self.brush_size = 5
+        self.draw_color = "#6366f1"
+        self.brush_size = 8
+        self.brush_opacity = 255 # 0-255
+        self.brush_flow = 0.5    # 0.1 - 1.0
         self.brush_type = "Ink" 
         self.stroke_history = [] 
         self.is_replaying = False
         
-        self.replay_speed_var = tk.DoubleVar(value=1.0)
+        # Stabilizer logic
+        self.points = []
+        self.stabilize_factor = 0.15 
         
+        self.replay_speed_var = tk.DoubleVar(value=1.0)
         self.setup_ui()
 
     def set_theme_colors(self):
         if self.dark_mode:
-            self.clr_bg = "#121212"
-            self.clr_side = "#1e1e1e"
-            self.clr_accent = "#818cf8"
+            self.clr_bg = "#0f172a"      # Deep Navy
+            self.clr_side = "#1e293b"    # Slate
+            self.clr_accent = "#818cf8"  # Indigo
             self.clr_text = "#f8fafc"
             self.clr_border = "#334155"
-            self.canvas_bg = "#1e1e1e"
+            self.canvas_bg = "#1e293b"
         else:
-            self.clr_bg = "#f0f2f5"
-            self.clr_side = "#ffffff"
-            self.clr_accent = "#6366f1"
+            self.clr_bg = "#f8fafc"      # Ghost White
+            self.clr_side = "#ffffff"    # Pure White
+            self.clr_accent = "#4f46e5"  # Deep Indigo
             self.clr_text = "#1e293b"
             self.clr_border = "#e2e8f0"
             self.canvas_bg = "#ffffff"
 
     def setup_ui(self):
-        for widget in self.root.winfo_children():
-            widget.destroy()
-            
+        for widget in self.root.winfo_children(): widget.destroy()
         self.root.configure(bg=self.clr_bg)
 
-        # 1. HEADER
-        self.header = tk.Frame(self.root, bg=self.clr_side, height=60, highlightthickness=1, highlightbackground=self.clr_border)
+        # 1. TOP NAV
+        self.header = tk.Frame(self.root, bg=self.clr_side, height=50, bd=0, highlightthickness=1, highlightbackground=self.clr_border)
         self.header.pack(side="top", fill="x")
 
-        title = tk.Label(self.header, text="Paintly", fg=self.clr_accent, bg=self.clr_side, font=("Segoe UI", 20, "bold"))
-        title.pack(side="left", padx=25)
-
+        tk.Label(self.header, text="🚀 v26.0 — NEXT GEN", fg=self.clr_accent, bg=self.clr_side, font=("Segoe UI", 12, "bold")).pack(side="left", padx=20)
+        
         self.update_btn = tk.Button(self.header, text="Check Updates", command=self.manual_update_check, 
-                                   bg=self.clr_bg, fg=self.clr_text, relief="flat", padx=15, font=("Segoe UI", 9))
-        self.update_btn.pack(side="right", padx=20, pady=12)
+                                   bg=self.clr_accent, fg="white", relief="flat", font=("Segoe UI", 9, "bold"), padx=10)
+        self.update_btn.pack(side="right", padx=15, pady=8)
 
-        # 2. TOOLBAR
-        self.toolbar_container = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=20)
-        self.toolbar_container.pack(side="left", fill="y")
+        # 2. LEFT TOOLBAR (Rounded feel)
+        self.sidebar = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=15)
+        self.sidebar.pack(side="left", fill="y")
 
-        self.tools = tk.Frame(self.toolbar_container, bg=self.clr_side, padx=10, pady=15, highlightthickness=1, highlightbackground=self.clr_border)
-        self.tools.pack(fill="y")
+        self.tool_panel = tk.Frame(self.sidebar, bg=self.clr_side, padx=12, pady=20, highlightthickness=1, highlightbackground=self.clr_border)
+        self.tool_panel.pack(fill="y", expand=True)
 
-        # Color Preview
-        self.color_preview = tk.Frame(self.tools, bg=self.draw_color, width=44, height=44, cursor="hand2", highlightthickness=1, highlightbackground=self.clr_border)
-        self.color_preview.pack(pady=10)
-        self.color_preview.bind("<Button-1>", lambda e: self.change_color())
+        # Color & Brushes
+        self.color_btn = tk.Button(self.tool_panel, bg=self.draw_color, width=4, height=2, relief="flat", command=self.change_color)
+        self.color_btn.pack(pady=(0, 20))
 
-        self.add_sep()
-
-        # Brushes
         brushes = [("Pencil", "✏"), ("Soft", "🖌"), ("Ink", "🖋"), ("Spray", "✨"), ("Eraser", "🧽")]
         for name, icon in brushes:
-            btn = tk.Button(self.tools, text=f"{icon}  {name}", command=lambda n=name: self.set_brush(n),
+            btn = tk.Button(self.tool_panel, text=f"{icon}  {name}", command=lambda n=name: self.set_brush(n),
                             bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 10), 
-                            relief="flat", anchor="w", padx=10, pady=6, activebackground=self.clr_bg)
+                            relief="flat", anchor="w", padx=10, pady=8, activebackground=self.clr_accent)
             btn.pack(fill="x")
 
         self.add_sep()
 
-        # REPLAY SPEED
-        tk.Label(self.tools, text="REPLAY SPEED", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
-        speed_frame = tk.Frame(self.tools, bg=self.clr_side)
-        speed_frame.pack(fill="x")
+        # Engine Controls (Opacity/Flow)
+        tk.Label(self.tool_panel, text="ENGINE", bg=self.clr_side, fg=self.clr_accent, font=("Segoe UI", 8, "bold")).pack(anchor="w")
         
-        for spd in [1, 2, 5]:
-            tk.Radiobutton(speed_frame, text=f"{spd}x", variable=self.replay_speed_var, value=spd,
-                           bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8),
-                           indicatoron=0, selectcolor=self.clr_accent, relief="flat", padx=5).pack(side="left", expand=True)
-
-        tk.Button(self.tools, text="🎬 Watch Replay", command=self.run_replay, bg=self.clr_accent, 
-                  fg="white", font=("Segoe UI", 10, "bold"), relief="flat", pady=8).pack(fill="x", pady=(10,5))
+        tk.Label(self.tool_panel, text="Flow", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8)).pack(anchor="w")
+        self.flow_slider = tk.Scale(self.tool_panel, from_=0.1, to=1.0, resolution=0.1, orient="horizontal", bg=self.clr_side, highlightthickness=0)
+        self.flow_slider.set(self.brush_flow)
+        self.flow_slider.pack(fill="x")
 
         self.add_sep()
 
-        # SETTINGS & DISCORD (New in 1.2.0)
-        tk.Label(self.tools, text="SETTINGS", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack()
+        # Replay & Settings
+        tk.Button(self.tool_panel, text="Watch Replay", command=self.run_replay, bg=self.clr_accent, fg="white", relief="flat", pady=8).pack(fill="x")
         
-        theme_text = "🌙 Dark Mode" if not self.dark_mode else "☀️ Light Mode"
-        tk.Button(self.tools, text=theme_text, command=self.toggle_theme, bg=self.clr_bg, 
-                  fg=self.clr_text, relief="flat", font=("Segoe UI", 9)).pack(fill="x", pady=5)
+        theme_icon = "☀️" if self.dark_mode else "🌙"
+        tk.Button(self.tool_panel, text=f"{theme_icon} Toggle Theme", command=self.toggle_theme, bg=self.clr_bg, fg=self.clr_text, relief="flat", font=("Segoe UI", 9)).pack(fill="x", pady=10)
         
-        # Discord Link
-        discord_btn = tk.Label(self.tools, text="Join Discord for updates", fg=self.clr_accent, 
-                               bg=self.clr_side, font=("Segoe UI", 8, "underline"), cursor="hand2")
-        discord_btn.pack(pady=(10,0))
-        discord_btn.bind("<Button-1>", lambda e: webbrowser.open(DISCORD_LINK))
-        
-        tk.Label(self.tools, text=DISCORD_LINK, fg="#64748b", bg=self.clr_side, font=("Segoe UI", 7)).pack()
+        tk.Label(self.tool_panel, text="Join Discord", fg=self.clr_accent, bg=self.clr_side, font=("Segoe UI", 8, "underline"), cursor="hand2").pack()
 
-        # 3. CANVAS
-        self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=10, pady=10)
-        self.canvas_frame.pack(side="right", fill="both", expand=True)
-        self.canvas = tk.Canvas(self.canvas_frame, bg=self.canvas_bg, highlightthickness=1, highlightbackground=self.clr_border, cursor="plus")
+        # 3. CANVAS (Center)
+        self.canvas_area = tk.Frame(self.root, bg=self.clr_bg, padx=20, pady=20)
+        self.canvas_area.pack(side="right", fill="both", expand=True)
+        
+        self.canvas = tk.Canvas(self.canvas_area, bg=self.canvas_bg, highlightthickness=0, cursor="crosshair")
         self.canvas.pack(fill="both", expand=True)
 
         self.canvas.bind("<Button-1>", self.start_draw)
         self.canvas.bind("<B1-Motion>", self.paint)
         self.canvas.bind("<ButtonRelease-1>", self.stop_draw)
 
+    def add_sep(self):
+        tk.Frame(self.tool_panel, bg=self.clr_border, height=1).pack(fill="x", pady=15)
+
     def toggle_theme(self):
         self.dark_mode = not self.dark_mode
         self.set_theme_colors()
         self.setup_ui()
 
-    def add_sep(self):
-        tk.Frame(self.tools, bg=self.clr_border, height=1).pack(fill="x", pady=15)
-
     def set_brush(self, b_name):
-        if b_name == "Eraser":
-            self.current_color = self.canvas_bg
-            self.brush_type = "Ink"
-        else:
-            self.current_color = self.draw_color
-            self.brush_type = b_name
+        self.brush_type = b_name
+
+    def start_draw(self, event):
+        self.points = [(event.x, event.y)]
+        self.last_x, self.last_y = event.x, event.y
 
     def paint(self, event):
         if self.is_replaying: return
-        x, y = event.x, event.y
-        if self.brush_type == "Pencil":
-            self.canvas.create_line(self.last_x, self.last_y, x, y, width=1, fill=self.clr_text)
+        
+        # NEXT GEN STABILIZER: Weighted average for smoother curves
+        alpha = self.stabilize_factor
+        cur_x = alpha * event.x + (1 - alpha) * self.last_x
+        cur_y = alpha * event.y + (1 - alpha) * self.last_y
+        
+        self.brush_flow = self.flow_slider.get()
+        color = self.draw_color if self.brush_type != "Eraser" else self.canvas_bg
+        
+        if self.brush_type == "Soft":
+            # Flow simulates pressure/transparency layering
+            for i in range(3):
+                sz = self.brush_size + (i * 4)
+                self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=sz, fill=color, capstyle=tk.ROUND)
+        elif self.brush_type == "Spray":
+            for _ in range(int(10 * self.brush_flow)):
+                offset = self.brush_size * 2
+                sx = cur_x + random.randint(-offset, offset)
+                sy = cur_y + random.randint(-offset, offset)
+                self.canvas.create_oval(sx, sy, sx+1, sy+1, fill=color, outline="")
         else:
-            self.canvas.create_line(self.last_x, self.last_y, x, y, width=self.brush_size, fill=self.current_color, capstyle=tk.ROUND, smooth=True)
+            self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=self.brush_size, fill=color, capstyle=tk.ROUND, smooth=True)
 
-        self.stroke_history.append({'coords': (self.last_x, self.last_y, x, y), 'color': self.current_color, 'size': self.brush_size})
-        self.last_x, self.last_y = x, y
+        self.stroke_history.append({'coords': (self.last_x, self.last_y, cur_x, cur_y), 'color': color, 'size': self.brush_size, 'type': self.brush_type})
+        self.last_x, self.last_y = cur_x, cur_y
 
-    def start_draw(self, event): self.last_x, self.last_y = event.x, event.y
-    def stop_draw(self, event): self.last_x, self.last_y = None, None
+    def stop_draw(self, event): self.points = []
 
     def run_replay(self):
         if not self.stroke_history or self.is_replaying: return
         self.is_replaying = True
         self.canvas.delete("all")
-        
-        multiplier = self.replay_speed_var.get()
-        delay = max(1, int(10 / multiplier))
-        strokes_per_tick = 1 if multiplier < 5 else 3 
-
         def play(i):
             if i < len(self.stroke_history):
-                for _ in range(strokes_per_tick):
-                    if i < len(self.stroke_history):
-                        s = self.stroke_history[i]
-                        self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
-                        i += 1
-                self.root.after(delay, lambda: play(i))
+                s = self.stroke_history[i]
+                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
+                self.root.after(2, lambda: play(i+1))
             else: self.is_replaying = False
         play(0)
 
@@ -186,21 +179,17 @@ class PaintlyApp:
         selected = askcolor(color=self.draw_color)[1]
         if selected:
             self.draw_color = selected
-            self.current_color = selected
-            self.color_preview.configure(bg=selected)
+            self.color_btn.configure(bg=selected)
 
     def manual_update_check(self):
         try:
-            cache_buster = f"?t={random.randint(1, 999999)}"
-            r = requests.get(VERSION_URL + cache_buster, timeout=5)
+            r = requests.get(VERSION_URL + f"?t={random.randint(1,999)}", timeout=5)
             if r.status_code == 200:
                 remote_v = r.text.strip()
-                remote_parts = [int(p) for p in remote_v.split('.')]
-                local_parts = [int(p) for p in CURRENT_VERSION.split('.')]
-                if remote_parts > local_parts:
-                    if messagebox.askyesno("Update", f"New version {remote_v} available. Update?"):
+                if float(remote_v) > float(CURRENT_VERSION):
+                    if messagebox.askyesno("Update", f"v{remote_v} is here! Update?"):
                         self.do_update()
-                else: messagebox.showinfo("Paintly", f"Up to date! (v{CURRENT_VERSION})")
+                else: messagebox.showinfo("Paintly", "v26.0 is the latest Gen.")
         except: pass
 
     def do_update(self):
