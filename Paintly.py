@@ -6,8 +6,7 @@ import sys
 import os
 
 # --- CONFIGURATION ---
-# CURRENT_VERSION is now 1.0.2
-CURRENT_VERSION = "1.0.2" 
+CURRENT_VERSION = "1.0.3" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/version.txt"
 
 class PaintlyApp:
@@ -37,10 +36,24 @@ class PaintlyApp:
 
         tk.Label(self.sidebar, text="TOOLS", fg="white", bg="#34495e", font=("Arial", 10, "bold")).pack(pady=10)
 
-        self.color_preview = tk.Frame(self.sidebar, bg=self.draw_color, width=40, height=40, highlightbackground="white", highlightthickness=2)
+        # CLICKABLE COLOR BLOCK
+        # This replaces the "Color" button. Clicking this square changes the color.
+        tk.Label(self.sidebar, text="Active Color", fg="#bdc3c7", bg="#34495e", font=("Arial", 7)).pack()
+        self.color_preview = tk.Frame(
+            self.sidebar, 
+            bg=self.draw_color, 
+            width=45, 
+            height=45, 
+            highlightbackground="white", 
+            highlightthickness=2,
+            cursor="hand2"
+        )
         self.color_preview.pack(pady=5)
+        # Bind the click event to the frame
+        self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
-        tk.Button(self.sidebar, text="Color", command=self.change_color, relief="flat", bg="#ecf0f1").pack(fill="x", pady=5)
+        ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
+
         tk.Button(self.sidebar, text="Brush", command=self.use_brush, relief="flat", bg="#ecf0f1").pack(fill="x", pady=5)
         tk.Button(self.sidebar, text="Eraser", command=self.use_eraser, relief="flat", bg="#ecf0f1").pack(fill="x", pady=5)
         
@@ -62,11 +75,8 @@ class PaintlyApp:
         self.canvas.bind("<ButtonRelease-1>", self.reset)
 
     def show_settings_message(self, event):
-        # Full screen overlay
         self.overlay = tk.Frame(self.root, bg="#000000", cursor="hand2")
         self.overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        
-        # Click anywhere to close
         self.overlay.bind("<Button-1>", lambda e: self.overlay.destroy())
 
         msg = "This is a free app\nno ads ofc\nno payment needed\nonly you and all users to use it"
@@ -79,7 +89,6 @@ class PaintlyApp:
             response = requests.get(VERSION_URL, timeout=5)
             if response.status_code == 200:
                 remote_version = response.text.strip()
-                # Only update if the online version is different from local 1.0.2
                 if remote_version != CURRENT_VERSION:
                     if messagebox.askyesno("Update Available", f"Version {remote_version} is ready. Install new update?"):
                         if messagebox.askyesno("Update", "Restart to bring the update to the new version?"):
