@@ -4,9 +4,11 @@ from tkinter.colorchooser import askcolor
 import requests
 import sys
 import os
+import random
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.0.3" 
+# Set this to 1.0.5. To test the update popup, change your GitHub version.txt to 1.0.6
+CURRENT_VERSION = "1.0.5" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/version.txt"
 
 class PaintlyApp:
@@ -19,6 +21,7 @@ class PaintlyApp:
         self.draw_color = "#000000"
         self.current_color = "#000000"
         self.brush_size = 5
+        self.brush_type = "Solid" # Options: "Solid", "Spray"
         self.last_x, self.last_y = None, None
 
         self.setup_ui()
@@ -26,38 +29,33 @@ class PaintlyApp:
 
     def setup_ui(self):
         # Sidebar
-        self.sidebar = tk.Frame(self.root, bg="#34495e", width=100, padx=10, pady=10)
+        self.sidebar = tk.Frame(self.root, bg="#34495e", width=120, padx=10, pady=10)
         self.sidebar.pack(side="left", fill="y")
 
         # Settings Icon
         self.settings_btn = tk.Label(self.sidebar, text="⚙", fg="white", bg="#34495e", font=("Arial", 20), cursor="hand2")
-        self.settings_btn.pack(pady=(0, 20))
+        self.settings_btn.pack(pady=(0, 10))
         self.settings_btn.bind("<Button-1>", self.show_settings_message)
 
-        tk.Label(self.sidebar, text="TOOLS", fg="white", bg="#34495e", font=("Arial", 10, "bold")).pack(pady=10)
-
-        # CLICKABLE COLOR BLOCK
-        # This replaces the "Color" button. Clicking this square changes the color.
-        tk.Label(self.sidebar, text="Active Color", fg="#bdc3c7", bg="#34495e", font=("Arial", 7)).pack()
-        self.color_preview = tk.Frame(
-            self.sidebar, 
-            bg=self.draw_color, 
-            width=45, 
-            height=45, 
-            highlightbackground="white", 
-            highlightthickness=2,
-            cursor="hand2"
-        )
+        tk.Label(self.sidebar, text="COLOR", fg="white", bg="#34495e", font=("Arial", 10, "bold")).pack(pady=5)
+        self.color_preview = tk.Frame(self.sidebar, bg=self.draw_color, width=45, height=45, highlightbackground="white", highlightthickness=2, cursor="hand2")
         self.color_preview.pack(pady=5)
-        # Bind the click event to the frame
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
         ttk.Separator(self.sidebar, orient='horizontal').pack(fill='x', pady=10)
 
-        tk.Button(self.sidebar, text="Brush", command=self.use_brush, relief="flat", bg="#ecf0f1").pack(fill="x", pady=5)
-        tk.Button(self.sidebar, text="Eraser", command=self.use_eraser, relief="flat", bg="#ecf0f1").pack(fill="x", pady=5)
+        tk.Label(self.sidebar, text="BRUSH TYPE", fg="white", bg="#34495e", font=("Arial", 8, "bold")).pack(pady=5)
         
-        tk.Label(self.sidebar, text="SIZE", fg="white", bg="#34495e", font=("Arial", 8)).pack(pady=(15, 0))
+        # Brush Selection Buttons
+        self.solid_btn = tk.Button(self.sidebar, text="Solid", command=lambda: self.set_brush_type("Solid"), relief="flat", bg="#3498db", fg="white")
+        self.solid_btn.pack(fill="x", pady=2)
+        
+        self.spray_btn = tk.Button(self.sidebar, text="Spray", command=lambda: self.set_brush_type("Spray"), relief="flat", bg="#ecf0f1", fg="black")
+        self.spray_btn.pack(fill="x", pady=2)
+
+        tk.Button(self.sidebar, text="Eraser", command=self.use_eraser, relief="flat", bg="#ecf0f1").pack(fill="x", pady=10)
+        
+        tk.Label(self.sidebar, text="SIZE", fg="white", bg="#34495e", font=("Arial", 8)).pack(pady=(10, 0))
         self.size_slider = tk.Scale(self.sidebar, from_=1, to=50, orient="vertical", bg="#34495e", fg="white", highlightthickness=0)
         self.size_slider.set(self.brush_size)
         self.size_slider.pack(fill="y", pady=5)
@@ -74,11 +72,21 @@ class PaintlyApp:
         self.canvas.bind("<B1-Motion>", self.paint)
         self.canvas.bind("<ButtonRelease-1>", self.reset)
 
+    def set_brush_type(self, b_type):
+        self.brush_type = b_type
+        self.current_color = self.draw_color
+        # Update button colors to show active selection
+        if b_type == "Solid":
+            self.solid_btn.config(bg="#3498db", fg="white")
+            self.spray_btn.config(bg="#ecf0f1", fg="black")
+        else:
+            self.spray_btn.config(bg="#3498db", fg="white")
+            self.solid_btn.config(bg="#ecf0f1", fg="black")
+
     def show_settings_message(self, event):
         self.overlay = tk.Frame(self.root, bg="#000000", cursor="hand2")
         self.overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
         self.overlay.bind("<Button-1>", lambda e: self.overlay.destroy())
-
         msg = "This is a free app\nno ads ofc\nno payment needed\nonly you and all users to use it"
         lbl = tk.Label(self.overlay, text=msg, fg="white", bg="black", font=("Arial", 18, "bold"), justify="center")
         lbl.place(relx=0.5, rely=0.5, anchor="center")
@@ -86,7 +94,7 @@ class PaintlyApp:
 
     def check_for_updates(self):
         try:
-            response = requests.get(VERSION_URL, timeout=5)
+            response = requests.get(VERSION_URL, timeout=5, headers={'Cache-Control': 'no-cache'})
             if response.status_code == 200:
                 remote_version = response.text.strip()
                 if remote_version != CURRENT_VERSION:
@@ -103,12 +111,9 @@ class PaintlyApp:
             self.current_color = selected
             self.color_preview.configure(bg=selected)
 
-    def use_brush(self):
-        self.current_color = self.draw_color
-        self.canvas.config(cursor="pencil")
-
     def use_eraser(self):
         self.current_color = "white"
+        self.brush_type = "Solid"
         self.canvas.config(cursor="dot")
 
     def clear_canvas(self):
@@ -117,14 +122,23 @@ class PaintlyApp:
 
     def paint(self, event):
         self.brush_size = self.size_slider.get()
-        if self.last_x and self.last_y:
-            self.canvas.create_line(
-                self.last_x, self.last_y, event.x, event.y,
-                width=self.brush_size, fill=self.current_color,
-                capstyle=tk.ROUND, smooth=tk.TRUE
-            )
-        self.last_x = event.x
-        self.last_y = event.y
+        
+        if self.brush_type == "Solid":
+            if self.last_x and self.last_y:
+                self.canvas.create_line(
+                    self.last_x, self.last_y, event.x, event.y,
+                    width=self.brush_size, fill=self.current_color,
+                    capstyle=tk.ROUND, smooth=tk.TRUE
+                )
+            self.last_x = event.x
+            self.last_y = event.y
+        
+        elif self.brush_type == "Spray":
+            # Spray effect creates random dots around the cursor
+            for _ in range(self.brush_size * 2):
+                x = event.x + random.randint(-self.brush_size, self.brush_size)
+                y = event.y + random.randint(-self.brush_size, self.brush_size)
+                self.canvas.create_oval(x, y, x+1, y+1, fill=self.current_color, outline=self.current_color)
 
     def reset(self, event):
         self.last_x, self.last_y = None, None
