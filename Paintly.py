@@ -5,11 +5,13 @@ import requests
 import sys
 import os
 import random
+import webbrowser
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.1.9" 
+CURRENT_VERSION = "1.2.0" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
+DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
 
 class PaintlyApp:
     def __init__(self, root):
@@ -50,7 +52,6 @@ class PaintlyApp:
             self.canvas_bg = "#ffffff"
 
     def setup_ui(self):
-        # Clear existing UI for theme switching
         for widget in self.root.winfo_children():
             widget.destroy()
             
@@ -91,7 +92,7 @@ class PaintlyApp:
 
         self.add_sep()
 
-        # REPLAY SPEED (Fixed for Super Fast 5x)
+        # REPLAY SPEED
         tk.Label(self.tools, text="REPLAY SPEED", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
         speed_frame = tk.Frame(self.tools, bg=self.clr_side)
         speed_frame.pack(fill="x")
@@ -106,11 +107,20 @@ class PaintlyApp:
 
         self.add_sep()
 
-        # SETTINGS (Theme Toggle)
+        # SETTINGS & DISCORD (New in 1.2.0)
         tk.Label(self.tools, text="SETTINGS", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack()
+        
         theme_text = "🌙 Dark Mode" if not self.dark_mode else "☀️ Light Mode"
         tk.Button(self.tools, text=theme_text, command=self.toggle_theme, bg=self.clr_bg, 
                   fg=self.clr_text, relief="flat", font=("Segoe UI", 9)).pack(fill="x", pady=5)
+        
+        # Discord Link
+        discord_btn = tk.Label(self.tools, text="Join Discord for updates", fg=self.clr_accent, 
+                               bg=self.clr_side, font=("Segoe UI", 8, "underline"), cursor="hand2")
+        discord_btn.pack(pady=(10,0))
+        discord_btn.bind("<Button-1>", lambda e: webbrowser.open(DISCORD_LINK))
+        
+        tk.Label(self.tools, text=DISCORD_LINK, fg="#64748b", bg=self.clr_side, font=("Segoe UI", 7)).pack()
 
         # 3. CANVAS
         self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=10, pady=10)
@@ -158,9 +168,8 @@ class PaintlyApp:
         self.canvas.delete("all")
         
         multiplier = self.replay_speed_var.get()
-        # 5x is now optimized to 1ms delay or even processing multiple strokes per tick
         delay = max(1, int(10 / multiplier))
-        strokes_per_tick = 1 if multiplier < 5 else 3 # Batch strokes at 5x for "super fast" feel
+        strokes_per_tick = 1 if multiplier < 5 else 3 
 
         def play(i):
             if i < len(self.stroke_history):
