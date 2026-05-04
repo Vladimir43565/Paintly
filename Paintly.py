@@ -9,7 +9,7 @@ import random
 import webbrowser
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.2.3" 
+CURRENT_VERSION = "1.2.4" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
@@ -29,10 +29,9 @@ class PaintlyApp:
         self.brush_flow = 0.6    
         self.brush_type = "Ink" 
         
-        # Tracking for Undo/Redo & Replay
         self.stroke_history = [] 
-        self.current_stroke_ids = [] # IDs of items in the current continuous stroke
-        self.undo_stack = [] # List of lists (each sub-list is one full stroke)
+        self.current_stroke_ids = []
+        self.undo_stack = [] 
         
         self.is_replaying = False
         self.stabilize_factor = 0.15 
@@ -59,62 +58,64 @@ class PaintlyApp:
         for widget in self.root.winfo_children(): widget.destroy()
         self.root.configure(bg=self.clr_bg)
 
-        # 1. TOP HEADER
-        self.header = tk.Frame(self.root, bg=self.clr_side, height=60, bd=0, highlightthickness=1, highlightbackground=self.clr_border)
+        # 1. TOP HEADER (CLEANER LOOK)
+        self.header = tk.Frame(self.root, bg=self.clr_side, height=65, bd=0, highlightthickness=1, highlightbackground=self.clr_border)
         self.header.pack(side="top", fill="x")
 
-        tk.Label(self.header, text=f"Paintly Studio v{CURRENT_VERSION}", fg=self.clr_accent, bg=self.clr_side, font=("Segoe UI", 14, "bold")).pack(side="left", padx=25)
+        tk.Label(self.header, text="PAINTLY", fg=self.clr_accent, bg=self.clr_side, font=("Inter", 16, "bold")).pack(side="left", padx=(25, 10))
+        tk.Label(self.header, text=f"v{CURRENT_VERSION}", fg=self.clr_text, bg=self.clr_side, font=("Inter", 9)).pack(side="left", pady=(5,0))
         
-        # Quick Actions in Header
-        tk.Button(self.header, text="↩ Undo Last", command=self.undo, bg=self.clr_side, fg=self.clr_text, relief="flat", padx=10).pack(side="left", padx=5)
-        tk.Button(self.header, text="🖼 Import Image", command=self.import_image, bg=self.clr_accent, fg="white", relief="flat", font=("Segoe UI", 9, "bold"), padx=15).pack(side="left", padx=20)
+        # Header Tools with Better Icons
+        tk.Button(self.header, text=" ⎌  Undo ", command=self.undo, bg=self.clr_side, fg=self.clr_text, relief="flat", font=("Inter", 10), padx=10).pack(side="left", padx=10)
+        tk.Button(self.header, text=" ⊞  Import ", command=self.import_image, bg=self.clr_accent, fg="white", relief="flat", font=("Inter", 10, "bold"), padx=15).pack(side="left", padx=10)
 
-        self.update_btn = tk.Button(self.header, text="Check Updates", command=self.manual_update_check, 
-                                   bg=self.clr_side, fg=self.clr_accent, relief="flat", font=("Segoe UI", 9, "bold"), padx=12)
+        self.update_btn = tk.Button(self.header, text=" ⟳  Check Updates", command=self.manual_update_check, 
+                                   bg=self.clr_side, fg=self.clr_accent, relief="flat", font=("Inter", 9, "bold"), padx=12)
         self.update_btn.pack(side="right", padx=20, pady=10)
 
-        # 2. SIDEBAR
+        # 2. SIDEBAR (MINIMALIST)
         self.sidebar = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=20)
         self.sidebar.pack(side="left", fill="y")
 
-        self.tools = tk.Frame(self.sidebar, bg=self.clr_side, padx=15, pady=20, highlightthickness=1, highlightbackground=self.clr_border)
+        self.tools = tk.Frame(self.sidebar, bg=self.clr_side, padx=12, pady=20, highlightthickness=1, highlightbackground=self.clr_border)
         self.tools.pack(fill="y", expand=True)
 
         # Color
-        tk.Label(self.tools, text="COLOR", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8, "bold")).pack(pady=(0,5))
-        self.color_preview = tk.Frame(self.tools, bg=self.draw_color, width=50, height=50, cursor="hand2", highlightthickness=2, highlightbackground=self.clr_border)
-        self.color_preview.pack(pady=(0, 20))
+        tk.Label(self.tools, text="PALETTE", bg=self.clr_side, fg=self.clr_accent, font=("Inter", 8, "bold")).pack(anchor="w", padx=5, pady=(0,10))
+        self.color_preview = tk.Frame(self.tools, bg=self.draw_color, width=54, height=54, cursor="hand2", highlightthickness=3, highlightbackground=self.clr_border)
+        self.color_preview.pack(pady=(0, 25))
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
-        # Brushes
-        brushes = [("Pencil", "✏"), ("Soft", "🖌"), ("Ink", "🖋"), ("Spray", "✨"), ("Eraser", "🧽")]
+        # Brushes with Clean Icons
+        brushes = [
+            ("Pencil", " ✎ "), 
+            ("Soft Brush", " 🖌 "), 
+            ("Ink Pen", " 🖋 "), 
+            ("Particle", " ⚗ "), 
+            ("Eraser", " ⌫ ")
+        ]
         for name, icon in brushes:
             btn = tk.Button(self.tools, text=f"{icon}  {name}", command=lambda n=name: self.set_brush(n),
-                            bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 10), 
-                            relief="flat", anchor="w", padx=10, pady=8, activebackground=self.clr_accent)
-            btn.pack(fill="x")
+                            bg=self.clr_side, fg=self.clr_text, font=("Inter", 10), 
+                            relief="flat", anchor="w", padx=12, pady=10, activebackground=self.clr_accent)
+            btn.pack(fill="x", pady=2)
 
         self.add_divider()
 
         # ENGINE
-        tk.Label(self.tools, text="ENGINE", bg=self.clr_side, fg=self.clr_accent, font=("Segoe UI", 8, "bold")).pack(anchor="w")
+        tk.Label(self.tools, text="STYLUS ENGINE", bg=self.clr_side, fg=self.clr_accent, font=("Inter", 8, "bold")).pack(anchor="w", padx=5)
         
-        tk.Label(self.tools, text="Size", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8)).pack(anchor="w", pady=(10,0))
-        self.size_slider = tk.Scale(self.tools, from_=1, to=150, orient="horizontal", bg=self.clr_side, highlightthickness=0, fg=self.clr_text)
-        self.size_slider.set(self.brush_size)
-        self.size_slider.pack(fill="x")
-
-        tk.Label(self.tools, text="Flow", bg=self.clr_side, fg=self.clr_text, font=("Segoe UI", 8)).pack(anchor="w", pady=(10,0))
-        self.flow_slider = tk.Scale(self.tools, from_=0.1, to=1.0, resolution=0.1, orient="horizontal", bg=self.clr_side, highlightthickness=0, fg=self.clr_text)
-        self.flow_slider.set(self.brush_flow)
-        self.flow_slider.pack(fill="x")
+        # Sliders
+        self.create_styled_slider("Size", self.brush_size, 1, 150, "size_slider")
+        self.create_styled_slider("Flow", self.brush_flow, 0.1, 1.0, "flow_slider")
 
         self.add_divider()
 
-        tk.Button(self.tools, text="▶ Playback", command=self.run_replay, bg=self.clr_accent, fg="white", relief="flat", font=("Segoe UI", 10, "bold"), pady=8).pack(fill="x")
+        # Bottom Actions
+        tk.Button(self.tools, text=" ▷  Playback", command=self.run_replay, bg=self.clr_accent, fg="white", relief="flat", font=("Inter", 10, "bold"), pady=10).pack(fill="x", pady=5)
         
-        theme_txt = "☀️ Light" if self.dark_mode else "🌙 Dark"
-        tk.Button(self.tools, text=theme_txt, command=self.toggle_theme, bg=self.clr_bg, fg=self.clr_text, relief="flat", font=("Segoe UI", 9)).pack(fill="x", pady=10)
+        theme_txt = " ☀  Light Mode" if self.dark_mode else " ☾  Dark Mode"
+        tk.Button(self.tools, text=theme_txt, command=self.toggle_theme, bg=self.clr_bg, fg=self.clr_text, relief="flat", font=("Inter", 9), pady=8).pack(fill="x", pady=5)
 
         # 3. CANVAS
         self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=15)
@@ -127,27 +128,33 @@ class PaintlyApp:
         self.canvas.bind("<B1-Motion>", self.paint)
         self.canvas.bind("<ButtonRelease-1>", self.stop_draw)
 
+    def create_styled_slider(self, label, start_val, f, t, attr_name):
+        tk.Label(self.tools, text=label, bg=self.clr_side, fg=self.clr_text, font=("Inter", 8)).pack(anchor="w", padx=5, pady=(12,0))
+        slider = tk.Scale(self.tools, from_=f, to=t, resolution=0.1 if t<=1 else 1, orient="horizontal", 
+                         bg=self.clr_side, highlightthickness=0, fg=self.clr_text, troughcolor=self.clr_bg, 
+                         activebackground=self.clr_accent, bd=0)
+        slider.set(start_val)
+        slider.pack(fill="x", padx=5)
+        setattr(self, attr_name, slider)
+
     def add_divider(self):
-        tk.Frame(self.tools, bg=self.clr_border, height=1).pack(fill="x", pady=20)
+        tk.Frame(self.tools, bg=self.clr_border, height=1).pack(fill="x", pady=25)
 
     def import_image(self):
-        file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.png *.jpg *.jpeg *.bmp")])
+        file_path = filedialog.askopenfilename(filetypes=[("Images", "*.png *.jpg *.jpeg *.bmp")])
         if file_path:
             img = Image.open(file_path)
-            # Resize to fit canvas roughly
             img.thumbnail((800, 600))
             self.tk_img = ImageTk.PhotoImage(img)
             img_id = self.canvas.create_image(400, 300, image=self.tk_img)
-            self.undo_stack.append([img_id]) # Add to undo stack as a single item
+            self.undo_stack.append([img_id])
 
     def undo(self):
         if self.undo_stack:
             last_stroke = self.undo_stack.pop()
             for item_id in last_stroke:
                 self.canvas.delete(item_id)
-            # Clean up history for replay as well
             if self.stroke_history:
-                # This is a simple pop; for perfect replay undo, complex filtering is needed
                 self.stroke_history = self.stroke_history[:-len(last_stroke)]
 
     def toggle_theme(self):
@@ -164,23 +171,19 @@ class PaintlyApp:
 
     def paint(self, event):
         if self.is_replaying: return
-        
         current_sz = self.size_slider.get()
         alpha = self.stabilize_factor
-        
         cur_x = alpha * event.x + (1 - alpha) * self.last_x
         cur_y = alpha * event.y + (1 - alpha) * self.last_y
-        
         color = self.draw_color if self.brush_type != "Eraser" else self.canvas_bg
         flow = self.flow_slider.get()
         
-        line_id = None
-        if self.brush_type == "Soft":
+        if "Soft" in self.brush_type:
             for i in range(2):
                 sz = current_sz + (i * 6)
                 line_id = self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=sz, fill=color, capstyle=tk.ROUND, smooth=True)
                 self.current_stroke_ids.append(line_id)
-        elif self.brush_type == "Spray":
+        elif "Particle" in self.brush_type:
             for _ in range(int(10 * flow)):
                 offset = current_sz * 1.5
                 sx = cur_x + random.randint(-int(offset), int(offset))
@@ -222,20 +225,15 @@ class PaintlyApp:
             r = requests.get(f"{VERSION_URL}?nocache={cb}", timeout=5)
             if r.status_code == 200:
                 remote_v = r.text.strip()
-                remote_parts = [int(p) for p in remote_v.split('.')]
-                local_parts = [int(p) for p in CURRENT_VERSION.split('.')]
-                if remote_parts > local_parts:
-                    if messagebox.askyesno("Update", f"v{remote_v} is available!"):
-                        self.do_update()
-                else: messagebox.showinfo("Paintly", "Version is up to date.")
+                if [int(p) for p in remote_v.split('.')] > [int(p) for p in CURRENT_VERSION.split('.')]:
+                    if messagebox.askyesno("Update", f"v{remote_v} is available!"): self.do_update()
+                else: messagebox.showinfo("Paintly", "Up to date!")
         except: pass
 
     def do_update(self):
         try:
-            cb = random.randint(100000, 999999)
-            new_code = requests.get(f"{UPDATE_URL}?nocache={cb}").text
-            with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f:
-                f.write(new_code)
+            new_code = requests.get(f"{UPDATE_URL}?nocache={random.randint(1,9)}").text
+            with open(os.path.abspath(sys.argv[0]), "w", encoding="utf-8") as f: f.write(new_code)
             os.execl(sys.executable, sys.executable, *sys.argv)
         except: pass
 
