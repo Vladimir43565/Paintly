@@ -7,9 +7,10 @@ import sys
 import os
 import random
 import webbrowser
+import time
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.2.5" 
+CURRENT_VERSION = "1.2.6" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
@@ -29,8 +30,10 @@ class PaintlyApp:
         self.brush_flow = 0.6    
         self.brush_type = "Ink" 
         
-        self.stroke_history = [] 
-        self.current_stroke_ids = []
+        # Playback 2.0 Storage
+        # Stores list of strokes: [{'type': 'line', 'data': {...}}, {'type': 'image', 'data': {...}}]
+        self.master_history = [] 
+        self.current_stroke_data = []
         self.undo_stack = [] 
         
         self.is_replaying = False
@@ -58,14 +61,13 @@ class PaintlyApp:
         for widget in self.root.winfo_children(): widget.destroy()
         self.root.configure(bg=self.clr_bg)
 
-        # 1. TOP HEADER (CLEANER LOOK)
+        # HEADER
         self.header = tk.Frame(self.root, bg=self.clr_side, height=65, bd=0, highlightthickness=1, highlightbackground=self.clr_border)
         self.header.pack(side="top", fill="x")
 
         tk.Label(self.header, text="PAINTLY", fg=self.clr_accent, bg=self.clr_side, font=("Inter", 16, "bold")).pack(side="left", padx=(25, 10))
         tk.Label(self.header, text=f"v{CURRENT_VERSION}", fg=self.clr_text, bg=self.clr_side, font=("Inter", 9)).pack(side="left", pady=(5,0))
         
-        # Header Tools with Better Icons
         tk.Button(self.header, text=" ⎌  Undo ", command=self.undo, bg=self.clr_side, fg=self.clr_text, relief="flat", font=("Inter", 10), padx=10).pack(side="left", padx=10)
         tk.Button(self.header, text=" ⊞  Import ", command=self.import_image, bg=self.clr_accent, fg="white", relief="flat", font=("Inter", 10, "bold"), padx=15).pack(side="left", padx=10)
 
@@ -73,27 +75,19 @@ class PaintlyApp:
                                    bg=self.clr_side, fg=self.clr_accent, relief="flat", font=("Inter", 9, "bold"), padx=12)
         self.update_btn.pack(side="right", padx=20, pady=10)
 
-        # 2. SIDEBAR (MINIMALIST)
+        # SIDEBAR
         self.sidebar = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=20)
         self.sidebar.pack(side="left", fill="y")
 
         self.tools = tk.Frame(self.sidebar, bg=self.clr_side, padx=12, pady=20, highlightthickness=1, highlightbackground=self.clr_border)
         self.tools.pack(fill="y", expand=True)
 
-        # Color
         tk.Label(self.tools, text="PALETTE", bg=self.clr_side, fg=self.clr_accent, font=("Inter", 8, "bold")).pack(anchor="w", padx=5, pady=(0,10))
         self.color_preview = tk.Frame(self.tools, bg=self.draw_color, width=54, height=54, cursor="hand2", highlightthickness=3, highlightbackground=self.clr_border)
         self.color_preview.pack(pady=(0, 25))
         self.color_preview.bind("<Button-1>", lambda e: self.change_color())
 
-        # Brushes with Clean Icons
-        brushes = [
-            ("Pencil", " ✎ "), 
-            ("Soft Brush", " 🖌 "), 
-            ("Ink Pen", " 🖋 "), 
-            ("Particle", " ⚗ "), 
-            ("Eraser", " ⌫ ")
-        ]
+        brushes = [("Pencil", " ✎ "), ("Soft Brush", " 🖌 "), ("Ink Pen", " 🖋 "), ("Particle", " ⚗ "), ("Eraser", " ⌫ ")]
         for name, icon in brushes:
             btn = tk.Button(self.tools, text=f"{icon}  {name}", command=lambda n=name: self.set_brush(n),
                             bg=self.clr_side, fg=self.clr_text, font=("Inter", 10), 
@@ -101,23 +95,18 @@ class PaintlyApp:
             btn.pack(fill="x", pady=2)
 
         self.add_divider()
-
-        # ENGINE
-        tk.Label(self.tools, text="STYLUS ENGINE", bg=self.clr_side, fg=self.clr_accent, font=("Inter", 8, "bold")).pack(anchor="w", padx=5)
+        tk.Label(self.tools, text="DYNAMIC ENGINE", bg=self.clr_side, fg=self.clr_accent, font=("Inter", 8, "bold")).pack(anchor="w", padx=5)
         
-        # Sliders
         self.create_styled_slider("Size", self.brush_size, 1, 150, "size_slider")
         self.create_styled_slider("Flow", self.brush_flow, 0.1, 1.0, "flow_slider")
 
         self.add_divider()
-
-        # Bottom Actions
-        tk.Button(self.tools, text=" ▷  Playback", command=self.run_replay, bg=self.clr_accent, fg="white", relief="flat", font=("Inter", 10, "bold"), pady=10).pack(fill="x", pady=5)
+        tk.Button(self.tools, text=" ▷  Playback 2.0", command=self.run_replay, bg=self.clr_accent, fg="white", relief="flat", font=("Inter", 10, "bold"), pady=10).pack(fill="x", pady=5)
         
         theme_txt = " ☀  Light Mode" if self.dark_mode else " ☾  Dark Mode"
         tk.Button(self.tools, text=theme_txt, command=self.toggle_theme, bg=self.clr_bg, fg=self.clr_text, relief="flat", font=("Inter", 9), pady=8).pack(fill="x", pady=5)
 
-        # 3. CANVAS
+        # CANVAS
         self.canvas_frame = tk.Frame(self.root, bg=self.clr_bg, padx=15, pady=15)
         self.canvas_frame.pack(side="right", fill="both", expand=True)
         
@@ -147,15 +136,17 @@ class PaintlyApp:
             img.thumbnail((800, 600))
             self.tk_img = ImageTk.PhotoImage(img)
             img_id = self.canvas.create_image(400, 300, image=self.tk_img)
+            # Store in Master History for Playback 2.0
+            self.master_history.append({'type': 'image', 'id': img_id, 'img_ref': self.tk_img, 'pos': (400, 300)})
             self.undo_stack.append([img_id])
 
     def undo(self):
         if self.undo_stack:
-            last_stroke = self.undo_stack.pop()
-            for item_id in last_stroke:
+            last_items = self.undo_stack.pop()
+            for item_id in last_items:
                 self.canvas.delete(item_id)
-            if self.stroke_history:
-                self.stroke_history = self.stroke_history[:-len(last_stroke)]
+            if self.master_history:
+                self.master_history.pop()
 
     def toggle_theme(self):
         self.dark_mode = not self.dark_mode
@@ -167,51 +158,67 @@ class PaintlyApp:
 
     def start_draw(self, event):
         self.last_x, self.last_y = event.x, event.y
-        self.current_stroke_ids = []
+        self.current_stroke_canvas_ids = []
+        self.current_stroke_data = [] # Data points for this specific stroke
 
     def paint(self, event):
         if self.is_replaying: return
+        
         current_sz = self.size_slider.get()
         alpha = self.stabilize_factor
         cur_x = alpha * event.x + (1 - alpha) * self.last_x
         cur_y = alpha * event.y + (1 - alpha) * self.last_y
-        color = self.draw_color if self.brush_type != "Eraser" else self.canvas_bg
+        
+        color = self.draw_color if "Eraser" not in self.brush_type else self.canvas_bg
         flow = self.flow_slider.get()
         
-        if "Soft" in self.brush_type:
-            for i in range(2):
-                sz = current_sz + (i * 6)
-                line_id = self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=sz, fill=color, capstyle=tk.ROUND, smooth=True)
-                self.current_stroke_ids.append(line_id)
-        elif "Particle" in self.brush_type:
-            for _ in range(int(10 * flow)):
-                offset = current_sz * 1.5
-                sx = cur_x + random.randint(-int(offset), int(offset))
-                sy = cur_y + random.randint(-int(offset), int(offset))
-                dot_id = self.canvas.create_oval(sx, sy, sx+1, sy+1, fill=color, outline="")
-                self.current_stroke_ids.append(dot_id)
-        else:
-            line_id = self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, width=current_sz, fill=color, capstyle=tk.ROUND, smooth=True)
-            self.current_stroke_ids.append(line_id)
-
-        self.stroke_history.append({'coords': (self.last_x, self.last_y, cur_x, cur_y), 'color': color, 'size': current_sz})
+        # Enhanced Brush logic
+        line_id = self.canvas.create_line(self.last_x, self.last_y, cur_x, cur_y, 
+                                          width=current_sz, fill=color, 
+                                          capstyle=tk.ROUND, smooth=True)
+        
+        self.current_stroke_canvas_ids.append(line_id)
+        self.current_stroke_data.append({
+            'coords': (self.last_x, self.last_y, cur_x, cur_y),
+            'color': color,
+            'size': current_sz
+        })
+        
         self.last_x, self.last_y = cur_x, cur_y
 
     def stop_draw(self, event):
-        if self.current_stroke_ids:
-            self.undo_stack.append(self.current_stroke_ids)
+        if self.current_stroke_canvas_ids:
+            self.undo_stack.append(self.current_stroke_canvas_ids)
+            # Commit full stroke to Master History
+            self.master_history.append({'type': 'stroke', 'data': self.current_stroke_data})
 
     def run_replay(self):
-        if not self.stroke_history or self.is_replaying: return
+        if not self.master_history or self.is_replaying: return
         self.is_replaying = True
         self.canvas.delete("all")
-        def play(i):
-            if i < len(self.stroke_history):
-                s = self.stroke_history[i]
-                self.canvas.create_line(s['coords'], fill=s['color'], width=s['size'], capstyle=tk.ROUND)
-                self.root.after(5, lambda: play(i+1))
-            else: self.is_replaying = False
-        play(0)
+        
+        def play_step(stroke_idx, point_idx):
+            if stroke_idx < len(self.master_history):
+                stroke = self.master_history[stroke_idx]
+                
+                if stroke['type'] == 'image':
+                    self.canvas.create_image(stroke['pos'], image=stroke['img_ref'])
+                    self.root.after(500, lambda: play_step(stroke_idx + 1, 0))
+                
+                elif stroke['type'] == 'stroke':
+                    points = stroke['data']
+                    if point_idx < len(points):
+                        p = points[point_idx]
+                        self.canvas.create_line(p['coords'], fill=p['color'], width=p['size'], capstyle=tk.ROUND)
+                        # Small delay between points for "drawing" feel
+                        self.root.after(5, lambda: play_step(stroke_idx, point_idx + 1))
+                    else:
+                        # Small delay between full strokes for realism
+                        self.root.after(100, lambda: play_step(stroke_idx + 1, 0))
+            else:
+                self.is_replaying = False
+
+        play_step(0, 0)
 
     def change_color(self):
         selected = askcolor(color=self.draw_color)[1]
