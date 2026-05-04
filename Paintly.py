@@ -9,7 +9,7 @@ import random
 import webbrowser
 
 # --- CONFIGURATION ---
-CURRENT_VERSION = "1.2.4" 
+CURRENT_VERSION = "1.2.5" 
 VERSION_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/main/version.txt"
 UPDATE_URL = "https://raw.githubusercontent.com/Vladimir43565/Paintly/refs/heads/main/Paintly.py"
 DISCORD_LINK = "https://discord.gg/3YCAwptj6d"
